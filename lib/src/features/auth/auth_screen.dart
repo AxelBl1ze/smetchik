@@ -915,6 +915,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         raw.contains('Unexpected status code returned from hook')) {
       return 'Почтовый сервис не отправил код. Попробуйте Telegram или другой способ входа.';
     }
+    if (raw.contains('upstream request timeout') ||
+        raw.contains('statusCode: 504')) {
+      return 'Почтовый сервис долго не отвечает. Проверьте, что Send Email Hook выключен, или попробуйте Telegram.';
+    }
     if (raw.contains('Token has expired') || raw.contains('expired')) {
       return 'Код устарел, запросите новый';
     }
