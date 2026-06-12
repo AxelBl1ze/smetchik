@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Сметчик — мобильное приложение для создания смет и отправки PDF клиентам.">
+  <meta name="theme-color" content="#F7F6F3">
+  <meta name="format-detection" content="telephone=no">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Сметчик">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-180.png">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Сметчик</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    html, body {
+      background: #F7F6F3;
+    }
+
+    #app-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #F7F6F3;
+      color: #1A1A1A;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      transition: opacity 180ms ease;
+    }
+
+    .app-loader-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 24px;
+    }
+
+    .app-loader-icon {
+      width: 58px;
+      height: 58px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #FEF0E0;
+      color: #F5820D;
+      font-size: 30px;
+      font-weight: 900;
+    }
+
+    .app-loader-title {
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .app-loader-bar {
+      width: 116px;
+      height: 4px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, .08);
+    }
+
+    .app-loader-bar::before {
+      content: "";
+      display: block;
+      width: 42px;
+      height: 100%;
+      border-radius: inherit;
+      background: #F5820D;
+      animation: app-loader 900ms ease-in-out infinite;
+    }
+
+    @keyframes app-loader {
+      0% { transform: translateX(-48px); }
+      100% { transform: translateX(122px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="app-loader" aria-label="Сметчик загружается">
+    <div class="app-loader-card">
+      <div class="app-loader-icon">С</div>
+      <div class="app-loader-title">Сметчик загружается</div>
+      <div class="app-loader-bar"></div>
+    </div>
+  </div>
+  <script>
+    function hideAppLoader() {
+      var loader = document.getElementById('app-loader');
+      if (!loader) return;
+      loader.style.opacity = '0';
+      setTimeout(function () {
+        loader.remove();
+      }, 220);
+    }
+
+    window.addEventListener('flutter-first-frame', hideAppLoader);
+    window.setTimeout(hideAppLoader, 12000);
+
+    if ('serviceWorker' in navigator &&
+        (location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+      navigator.serviceWorker.getRegistrations().then(function (registrations) {
+        registrations.forEach(function (registration) {
+          registration.unregister();
+        });
+      });
+      if ('caches' in window) {
+        caches.keys().then(function (keys) {
+          keys.forEach(function (key) {
+            caches.delete(key);
+          });
+        });
+      }
+    }
+  </script>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Сброс пароля в Сметчике</title>
+  </head>
+  <body style="margin:0;background:#F7F6F3;font-family:Arial,Helvetica,sans-serif;color:#1A1A1A;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F7F6F3;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#FFFFFF;border:1px solid rgba(0,0,0,.08);border-radius:22px;overflow:hidden;">
+            <tr>
+              <td style="padding:24px 24px 8px;">
+                <div style="display:inline-flex;align-items:center;justify-content:center;width:54px;height:54px;border-radius:18px;background:#FEF0E0;color:#F5820D;font-size:28px;font-weight:900;">С</div>
+                <h1 style="margin:18px 0 8px;font-size:26px;line-height:1.15;">Сброс пароля</h1>
+                <p style="margin:0;color:#5F5E5A;font-size:16px;line-height:1.45;">Откройте Сметчик по кнопке ниже и задайте новый пароль.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 24px 26px;">
+                <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#F5820D;color:#FFFFFF;text-decoration:none;font-weight:800;border-radius:14px;padding:14px 20px;">Сбросить пароль</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 24px;background:#1A1A1A;color:#D7D4CC;font-size:13px;line-height:1.45;">
+                Если вы не запрашивали сброс пароля, просто проигнорируйте это письмо.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

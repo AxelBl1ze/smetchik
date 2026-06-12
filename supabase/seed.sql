@@ -1,0 +1,1 @@
+-- Seed data is already included in the initial migration for the default catalog.
