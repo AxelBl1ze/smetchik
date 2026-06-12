@@ -911,6 +911,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     if (raw.contains('Email not confirmed')) {
       return 'Email ещё не подтверждён';
     }
+    if (raw.contains('unexpected_failure') ||
+        raw.contains('Unexpected status code returned from hook')) {
+      return 'Почтовый сервис не отправил код. Попробуйте Telegram или другой способ входа.';
+    }
     if (raw.contains('Token has expired') || raw.contains('expired')) {
       return 'Код устарел, запросите новый';
     }
