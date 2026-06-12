@@ -92,6 +92,14 @@ async function sendWithUnisender(message: {
     throw new Error('UNISENDER_SENDER_EMAIL is not configured');
   }
 
+  if (listId) {
+    await importUnisenderContact({
+      apiKey,
+      email: message.email,
+      listId,
+    });
+  }
+
   const form = new URLSearchParams({
     api_key: apiKey,
     email: message.email,
@@ -126,6 +134,57 @@ async function sendWithUnisender(message: {
       (isRecord(result) && typeof result.error === 'string'
         ? result.error
         : `UniSender request failed with ${response.status}`);
+    // Log response details for easier debugging in Supabase function logs
+    try {
+      console.error('UniSender response status:', response.status);
+      console.error('UniSender response body:', JSON.stringify(result));
+    } catch (e) {
+      console.error('Failed to stringify UniSender result', e);
+    }
+    throw new Error(message);
+  }
+}
+
+async function importUnisenderContact(input: {
+  apiKey: string;
+  email: string;
+  listId: string;
+}) {
+  const form = new URLSearchParams({
+    api_key: input.apiKey,
+    'field_names[0]': 'email',
+    'field_names[1]': 'email_list_ids',
+    'data[0][0]': input.email,
+    'data[0][1]': input.listId,
+    overwrite_lists: '0',
+  });
+
+  const response = await fetch(
+    'https://api.unisender.com/ru/api/importContacts?format=json',
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: form,
+    },
+  );
+
+  const result = await response.json().catch(() => ({}));
+  const apiError = importContactsError(result) ?? unisenderError(result);
+  if (!response.ok || apiError) {
+    const message =
+      apiError ??
+      (isRecord(result) && typeof result.error === 'string'
+        ? result.error
+        : `UniSender import failed with ${response.status}`);
+    try {
+      console.error('UniSender import status:', response.status);
+      console.error('UniSender import body:', JSON.stringify(result));
+    } catch (e) {
+      console.error('Failed to stringify UniSender import result', e);
+    }
     throw new Error(message);
   }
 }
@@ -270,4 +329,24 @@ function unisenderError(result: unknown): string | null {
     }
   }
   return null;
+}
+
+function importContactsError(result: unknown): string | null {
+  if (!isRecord(result)) return null;
+  const data = isRecord(result.result) ? result.result : null;
+  if (!data) return null;
+
+  const invalid = typeof data.invalid === 'number' ? data.invalid : 0;
+  if (invalid <= 0) return null;
+
+  const log = data.log;
+  if (Array.isArray(log) && log.length > 0) {
+    const first = log[0];
+    if (typeof first === 'string') return first;
+    if (isRecord(first)) {
+      const message = first.message ?? first.error ?? first.reason;
+      if (typeof message === 'string') return message;
+    }
+  }
+  return 'UniSender did not import the contact';
 }
