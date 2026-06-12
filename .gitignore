@@ -57,3 +57,8 @@ android/app/*.keystore
 
 # Supabase local cache
 supabase/.temp/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
