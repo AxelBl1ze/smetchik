@@ -23,6 +23,17 @@ class PdfService {
     final (regular, bold) = await _fonts();
     final theme = pw.ThemeData.withFont(base: regular, bold: bold);
     final doc = pw.Document(theme: theme);
+    final hasPro = profile?.hasActivePro == true;
+    final showBrandHeader = !hasPro || profile?.pdfShowBrandHeader == true;
+    final showServiceMark = !hasPro || profile?.pdfShowServiceMark == true;
+    final template = hasPro
+        ? PdfTemplate.normalize(profile?.pdfTemplate)
+        : PdfTemplate.classic;
+    final accent = PdfColor.fromHex(
+      hasPro
+          ? PdfAccentColor.normalize(profile?.pdfAccentColor)
+          : PdfAccentColor.orange,
+    );
     final masterName = profile?.fullName.trim().isNotEmpty == true
         ? profile!.fullName.trim()
         : 'Сметчик';
@@ -34,53 +45,25 @@ class PdfService {
 
     doc.addPage(
       pw.MultiPage(
-        pageTheme: const pw.PageTheme(
-          margin: pw.EdgeInsets.all(32),
+        pageTheme: pw.PageTheme(
+          margin: _pageMargin(template),
           pageFormat: PdfPageFormat.a4,
         ),
+        footer: showServiceMark ? _serviceFooter : null,
         build: (context) => [
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'Сметчик',
-                    style: pw.TextStyle(
-                      fontSize: 22,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColor.fromHex('#F5820D'),
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(masterName, style: const pw.TextStyle(fontSize: 10)),
-                  if (profile?.phone?.isNotEmpty == true)
-                    pw.Text(
-                      profile!.phone!,
-                      style: const pw.TextStyle(fontSize: 10),
-                    ),
-                ],
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(
-                    'Прайс-лист',
-                    style: pw.TextStyle(
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text('Дата: ${formatDate(DateTime.now())}'),
-                  pw.Text('Позиций: ${items.length}'),
-                ],
-              ),
+          _documentHeader(
+            template: template,
+            accent: accent,
+            brandTitle: showBrandHeader ? 'Сметчик' : masterName,
+            subtitle: showBrandHeader ? masterName : profile?.specialization,
+            phone: profile?.phone,
+            docTitle: 'Прайс-лист',
+            meta: [
+              'Дата: ${formatDate(DateTime.now())}',
+              'Позиций: ${items.length}',
             ],
           ),
-          pw.SizedBox(height: 24),
+          pw.SizedBox(height: template == PdfTemplate.compact ? 14 : 24),
           for (final entry in grouped.entries) ...[
             pw.Text(
               entry.key,
@@ -96,9 +79,9 @@ class PdfService {
                 top: pw.BorderSide(color: PdfColor.fromHex('#E0DED8')),
               ),
               headerDecoration: pw.BoxDecoration(
-                color: PdfColor.fromHex('#FEF0E0'),
+                color: _tableHeaderColor(template, accent),
               ),
-              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerStyle: _tableHeaderStyle(template),
               cellStyle: const pw.TextStyle(fontSize: 10),
               cellAlignment: pw.Alignment.centerLeft,
               cellAlignments: {
@@ -134,63 +117,49 @@ class PdfService {
     final theme = pw.ThemeData.withFont(base: regular, bold: bold);
     final doc = pw.Document(theme: theme);
     final estimate = detail.estimate;
+    final hasPro = profile?.hasActivePro == true;
+    final template = hasPro
+        ? PdfTemplate.normalize(profile?.pdfTemplate)
+        : PdfTemplate.classic;
+    final accent = PdfColor.fromHex(
+      hasPro
+          ? PdfAccentColor.normalize(profile?.pdfAccentColor)
+          : PdfAccentColor.orange,
+    );
+    final showBrandHeader = !hasPro || profile?.pdfShowBrandHeader == true;
+    final showSignatures = !hasPro || profile?.pdfShowSignatures == true;
+    final showServiceMark = !hasPro || profile?.pdfShowServiceMark == true;
+    final paymentTerms = hasPro ? profile?.pdfPaymentTerms?.trim() : null;
+    final footerNote = hasPro ? profile?.pdfFooterNote?.trim() : null;
     final masterName = profile?.fullName.trim().isNotEmpty == true
         ? profile!.fullName.trim()
         : 'Сметчик';
 
     doc.addPage(
       pw.MultiPage(
-        pageTheme: const pw.PageTheme(
-          margin: pw.EdgeInsets.all(32),
+        pageTheme: pw.PageTheme(
+          margin: _pageMargin(template),
           pageFormat: PdfPageFormat.a4,
         ),
+        footer: showServiceMark ? _serviceFooter : null,
         build: (context) => [
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'Сметчик',
-                    style: pw.TextStyle(
-                      fontSize: 22,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColor.fromHex('#F5820D'),
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(masterName, style: const pw.TextStyle(fontSize: 10)),
-                  if (profile?.phone?.isNotEmpty == true)
-                    pw.Text(
-                      profile!.phone!,
-                      style: const pw.TextStyle(fontSize: 10),
-                    ),
-                ],
-              ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text(
-                    'Коммерческое предложение',
-                    style: pw.TextStyle(
-                      fontSize: 14,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text('Дата: ${formatDate(estimate.estimateDate)}'),
-                  pw.Text(
-                    'Смета: ${estimate.id.substring(0, 8).toUpperCase()}',
-                  ),
-                ],
-              ),
+          _documentHeader(
+            template: template,
+            accent: accent,
+            brandTitle: showBrandHeader ? 'Сметчик' : masterName,
+            subtitle: showBrandHeader ? masterName : profile?.specialization,
+            phone: profile?.phone,
+            docTitle: 'Коммерческое предложение',
+            meta: [
+              'Дата: ${formatDate(estimate.estimateDate)}',
+              'Смета: ${estimate.id.substring(0, 8).toUpperCase()}',
             ],
           ),
-          pw.SizedBox(height: 26),
+          pw.SizedBox(height: template == PdfTemplate.compact ? 16 : 26),
           pw.Container(
-            padding: const pw.EdgeInsets.all(14),
+            padding: pw.EdgeInsets.all(
+              template == PdfTemplate.compact ? 10 : 14,
+            ),
             decoration: pw.BoxDecoration(
               color: PdfColor.fromHex('#F7F6F3'),
               borderRadius: pw.BorderRadius.circular(8),
@@ -231,9 +200,9 @@ class PdfService {
               top: pw.BorderSide(color: PdfColor.fromHex('#E0DED8')),
             ),
             headerDecoration: pw.BoxDecoration(
-              color: PdfColor.fromHex('#FEF0E0'),
+              color: _tableHeaderColor(template, accent),
             ),
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+            headerStyle: _tableHeaderStyle(template),
             cellStyle: const pw.TextStyle(fontSize: 10),
             cellAlignment: pw.Alignment.centerLeft,
             cellAlignments: {
@@ -260,6 +229,14 @@ class PdfService {
             ],
           ),
           pw.SizedBox(height: 18),
+          if (paymentTerms?.isNotEmpty == true) ...[
+            _noteBlock('Условия оплаты', paymentTerms!),
+            pw.SizedBox(height: 10),
+          ],
+          if (footerNote?.isNotEmpty == true) ...[
+            _noteBlock('Примечание', footerNote!),
+            pw.SizedBox(height: 10),
+          ],
           pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.end,
             children: [
@@ -267,7 +244,9 @@ class PdfService {
                 width: 220,
                 padding: const pw.EdgeInsets.all(14),
                 decoration: pw.BoxDecoration(
-                  color: PdfColor.fromHex('#2D2D2D'),
+                  color: template == PdfTemplate.accent
+                      ? accent
+                      : PdfColor.fromHex('#2D2D2D'),
                   borderRadius: pw.BorderRadius.circular(8),
                 ),
                 child: pw.Row(
@@ -293,14 +272,16 @@ class PdfService {
               ),
             ],
           ),
-          pw.SizedBox(height: 42),
-          pw.Row(
-            children: [
-              _signature('Исполнитель'),
-              pw.SizedBox(width: 32),
-              _signature('Заказчик'),
-            ],
-          ),
+          if (showSignatures) ...[
+            pw.SizedBox(height: 42),
+            pw.Row(
+              children: [
+                _signature('Исполнитель'),
+                pw.SizedBox(width: 32),
+                _signature('Заказчик'),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -336,6 +317,123 @@ class PdfService {
     );
   }
 
+  static pw.EdgeInsets _pageMargin(String template) {
+    return switch (PdfTemplate.normalize(template)) {
+      PdfTemplate.compact => const pw.EdgeInsets.fromLTRB(24, 24, 24, 28),
+      _ => const pw.EdgeInsets.all(32),
+    };
+  }
+
+  static PdfColor _tableHeaderColor(String template, PdfColor accent) {
+    return switch (PdfTemplate.normalize(template)) {
+      PdfTemplate.accent => accent,
+      PdfTemplate.compact => PdfColor.fromHex('#F7F6F3'),
+      _ => PdfColor.fromHex('#FEF0E0'),
+    };
+  }
+
+  static pw.TextStyle _tableHeaderStyle(String template) {
+    return pw.TextStyle(
+      fontWeight: pw.FontWeight.bold,
+      color: PdfTemplate.normalize(template) == PdfTemplate.accent
+          ? PdfColors.white
+          : PdfColors.black,
+    );
+  }
+
+  static pw.Widget _documentHeader({
+    required String template,
+    required PdfColor accent,
+    required String brandTitle,
+    required String? subtitle,
+    required String? phone,
+    required String docTitle,
+    required List<String> meta,
+  }) {
+    final normalized = PdfTemplate.normalize(template);
+    final titleColor = normalized == PdfTemplate.accent
+        ? PdfColors.white
+        : accent;
+    final subtitleColor = normalized == PdfTemplate.accent
+        ? PdfColors.white
+        : PdfColors.black;
+
+    final left = pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          brandTitle,
+          style: pw.TextStyle(
+            fontSize: normalized == PdfTemplate.compact ? 18 : 22,
+            fontWeight: pw.FontWeight.bold,
+            color: titleColor,
+          ),
+        ),
+        pw.SizedBox(height: 4),
+        if (subtitle?.trim().isNotEmpty == true)
+          pw.Text(
+            subtitle!.trim(),
+            style: pw.TextStyle(fontSize: 10, color: subtitleColor),
+          ),
+        if (phone?.trim().isNotEmpty == true)
+          pw.Text(
+            phone!.trim(),
+            style: pw.TextStyle(fontSize: 10, color: subtitleColor),
+          ),
+      ],
+    );
+
+    final right = pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      children: [
+        pw.Text(
+          docTitle,
+          style: pw.TextStyle(
+            fontSize: 14,
+            fontWeight: pw.FontWeight.bold,
+            color: subtitleColor,
+          ),
+        ),
+        pw.SizedBox(height: 4),
+        for (final value in meta)
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 10, color: subtitleColor),
+          ),
+      ],
+    );
+
+    if (normalized == PdfTemplate.accent) {
+      return pw.Container(
+        padding: const pw.EdgeInsets.all(16),
+        decoration: pw.BoxDecoration(
+          color: accent,
+          borderRadius: pw.BorderRadius.circular(10),
+        ),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [left, right],
+        ),
+      );
+    }
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+      children: [
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [left, right],
+        ),
+        if (normalized == PdfTemplate.classic) ...[
+          pw.SizedBox(height: 10),
+          pw.Container(height: 2, color: accent),
+        ],
+      ],
+    );
+  }
+
   static pw.Widget _signature(String label) {
     return pw.Expanded(
       child: pw.Column(
@@ -344,6 +442,39 @@ class PdfService {
           pw.SizedBox(height: 4),
           pw.Text(label, style: const pw.TextStyle(fontSize: 9)),
         ],
+      ),
+    );
+  }
+
+  static pw.Widget _noteBlock(String label, String value) {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: PdfColor.fromHex('#F7F6F3'),
+        borderRadius: pw.BorderRadius.circular(8),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            label,
+            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(value, style: const pw.TextStyle(fontSize: 10)),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _serviceFooter(pw.Context context) {
+    return pw.Container(
+      alignment: pw.Alignment.centerRight,
+      margin: const pw.EdgeInsets.only(top: 12),
+      child: pw.Text(
+        'Создано в Сметчике',
+        style: pw.TextStyle(fontSize: 8, color: PdfColor.fromHex('#888780')),
       ),
     );
   }

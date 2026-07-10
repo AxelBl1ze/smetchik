@@ -65,10 +65,12 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
               child: Row(
                 children: [
                   _filterChip('all', 'Все'),
-                  _filterChip('draft', 'Черновики'),
-                  _filterChip('sent', 'Отправлены'),
-                  _filterChip('approved', 'В работе'),
-                  _filterChip('completed', 'Завершены'),
+                  _filterChip(EstimateStatus.draft, 'Черновики'),
+                  _filterChip(EstimateStatus.sent, 'Отправлены'),
+                  _filterChip(EstimateStatus.accepted, 'Приняты'),
+                  _filterChip(EstimateStatus.inProgress, 'В работе'),
+                  _filterChip(EstimateStatus.completed, 'Завершены'),
+                  _filterChip(EstimateStatus.declined, 'Отклонены'),
                 ],
               ),
             ),
@@ -77,7 +79,8 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
               data: (items) {
                 final filtered = items.where((estimate) {
                   final matchesStatus =
-                      _status == 'all' || estimate.status == _status;
+                      _status == 'all' ||
+                      EstimateStatus.normalize(estimate.status) == _status;
                   final haystack =
                       '${estimate.objectTitle} ${estimate.client?.name ?? ''}'
                           .toLowerCase();

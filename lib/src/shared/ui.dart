@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
+import '../data/models.dart';
 
 class ScreenPadding extends StatelessWidget {
   const ScreenPadding({super.key, required this.child, this.maxWidth = 460});
@@ -10,17 +11,32 @@ class ScreenPadding extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: maxWidth),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-          child: SizedBox(width: double.infinity, child: child),
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = _boundedContentWidth(constraints, maxWidth);
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SizedBox(
+            width: width,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+              child: child,
+            ),
+          ),
+        );
+      },
     );
   }
+}
+
+double _boundedContentWidth(BoxConstraints constraints, double maxWidth) {
+  final viewportWidth = constraints.maxWidth;
+  if (!viewportWidth.isFinite) return maxWidth;
+  return viewportWidth < maxWidth ? viewportWidth : maxWidth;
+}
+
+bool _isNarrow(BoxConstraints constraints, double breakpoint) {
+  return !constraints.maxWidth.isFinite || constraints.maxWidth < breakpoint;
 }
 
 class ResponsiveListView extends StatelessWidget {
@@ -37,26 +53,32 @@ class ResponsiveListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: EdgeInsets.zero,
-      children: [
-        Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth),
-            child: Padding(
-              padding: padding,
-              child: SizedBox(
-                width: double.infinity,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = _boundedContentWidth(constraints, maxWidth);
+        final minHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight
+            : 0.0;
+        return SingleChildScrollView(
+          padding: EdgeInsets.zero,
+          child: Center(
+            child: SizedBox(
+              width: width,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: minHeight),
+                child: Padding(
+                  padding: padding,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: children,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }
@@ -103,7 +125,7 @@ class ScreenTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final compact = constraints.maxWidth < 640 || actions.isEmpty;
+        final compact = _isNarrow(constraints, 640) || actions.isEmpty;
         final heading = Row(
           children: [
             Container(
@@ -265,21 +287,33 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final data = switch (status) {
-      'sent' => ('Отправлена', Icons.send, AppColors.info, AppColors.infoBg),
-      'approved' => (
+    final normalizedStatus = EstimateStatus.normalize(status);
+    final data = switch (normalizedStatus) {
+      EstimateStatus.sent => (
+        'Отправлена',
+        Icons.send,
+        AppColors.info,
+        AppColors.infoBg,
+      ),
+      EstimateStatus.accepted => (
+        'Принята',
+        Icons.thumb_up_alt_outlined,
+        AppColors.orangeDark,
+        AppColors.orangeLight,
+      ),
+      EstimateStatus.inProgress => (
         'В работе',
-        Icons.check,
+        Icons.handyman_outlined,
         AppColors.success,
         AppColors.successBg,
       ),
-      'completed' => (
+      EstimateStatus.completed => (
         'Завершена',
         Icons.done_all,
         AppColors.success,
         AppColors.successBg,
       ),
-      'declined' => (
+      EstimateStatus.declined => (
         'Отклонена',
         Icons.close,
         AppColors.danger,
@@ -298,7 +332,9 @@ class StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: data.$4,
         borderRadius: BorderRadius.circular(999),
-        border: status == 'draft' ? Border.all(color: AppColors.border) : null,
+        border: normalizedStatus == EstimateStatus.draft
+            ? Border.all(color: AppColors.border)
+            : null,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -26,7 +26,9 @@ final catalogDataProvider = FutureProvider<CatalogData>((ref) {
   return ref.watch(repositoryProvider).fetchCatalogData();
 });
 
-final catalogItemsProvider = FutureProvider<List<CatalogItemModel>>((ref) async {
+final catalogItemsProvider = FutureProvider<List<CatalogItemModel>>((
+  ref,
+) async {
   return (await ref.watch(catalogDataProvider.future)).items;
 });
 
@@ -81,6 +83,81 @@ class SmetchikRepository {
     });
   }
 
+  Future<void> savePdfSettings({
+    required bool showBrandHeader,
+    required bool showSignatures,
+    required bool showServiceMark,
+    required String template,
+    required String accentColor,
+    String? paymentTerms,
+    String? footerNote,
+  }) async {
+    final profile = await fetchProfile();
+    if (profile?.hasActivePro != true) {
+      throw Exception(
+        'Настройки PDF доступны на тарифе Профи. Подключите Профи, чтобы менять оформление смет.',
+      );
+    }
+
+    await _client
+        .from('profiles')
+        .update({
+          'pdf_show_brand_header': showBrandHeader,
+          'pdf_show_signatures': showSignatures,
+          'pdf_show_service_mark': showServiceMark,
+          'pdf_template': PdfTemplate.normalize(template),
+          'pdf_accent_color': PdfAccentColor.normalize(accentColor),
+          'pdf_payment_terms': _blankToNull(paymentTerms),
+          'pdf_footer_note': _blankToNull(footerNote),
+        })
+        .eq('id', _userId);
+  }
+
+  Future<void> updateSubscriptionPlan(String plan) async {
+    if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.pro) {
+      return activateMockPro();
+    }
+    return switchToBasicPlan();
+  }
+
+  Future<void> activateMockPro({int days = 30}) async {
+    final renewsAt = DateTime.now().toUtc().add(Duration(days: days));
+    await _client
+        .from('profiles')
+        .update({
+          'subscription_plan': SubscriptionPlan.pro,
+          'subscription_status': SubscriptionStatus.active,
+          'subscription_source': SubscriptionSource.mock,
+          'subscription_renews_at': renewsAt.toIso8601String(),
+        })
+        .eq('id', _userId);
+  }
+
+  Future<void> switchToBasicPlan() async {
+    await _client
+        .from('profiles')
+        .update({
+          'subscription_plan': SubscriptionPlan.basic,
+          'subscription_status': SubscriptionStatus.active,
+          'subscription_source': SubscriptionSource.mock,
+          'subscription_renews_at': null,
+        })
+        .eq('id', _userId);
+  }
+
+  Future<void> expireMockSubscription() async {
+    final expiredAt = DateTime.now().toUtc().subtract(const Duration(days: 1));
+    await _client
+        .from('profiles')
+        .update({
+          'subscription_plan': SubscriptionPlan.pro,
+          'subscription_status': SubscriptionStatus.pastDue,
+          'subscription_source': SubscriptionSource.mock,
+          'subscription_renews_at': expiredAt.toIso8601String(),
+        })
+        .eq('id', _userId);
+  }
+
   String? logoPublicUrl(String? path) {
     if (path == null || path.trim().isEmpty) return null;
     return _client.storage.from('logos').getPublicUrl(path);
@@ -127,6 +204,10 @@ class SmetchikRepository {
     String? objectAddress,
     String? notes,
   }) async {
+    if (id == null) {
+      await _ensureCanCreateClient();
+    }
+
     final payload = {
       'user_id': _userId,
       'name': name.trim(),
@@ -150,6 +231,27 @@ class SmetchikRepository {
     return ClientModel.fromMap(row);
   }
 
+  Future<void> _ensureCanCreateClient() async {
+    final profile = await fetchProfile();
+    if (profile?.hasActivePro == true) return;
+
+    final limit = profile?.clientLimit ?? ProfileModel.basicClientLimit;
+    final count = await countClients();
+    if (count >= limit) {
+      throw Exception(
+        'Лимит базового тарифа: $limit клиентов. Подключите Профи, чтобы вести клиентскую базу без ограничений.',
+      );
+    }
+  }
+
+  Future<int> countClients() async {
+    final rows = await _client
+        .from('clients')
+        .select('id')
+        .eq('user_id', _userId);
+    return rows.length;
+  }
+
   Future<CatalogData> fetchCatalogData() async {
     final results = await Future.wait<dynamic>([
       _fetchHiddenCatalogCategories(),
@@ -163,7 +265,7 @@ class SmetchikRepository {
           .order('title'),
       _client
           .from('catalog_categories')
-          .select('title,is_hidden')
+          .select('title,is_hidden,icon_key')
           .eq('user_id', _userId)
           .order('sort_order')
           .order('title'),
@@ -176,6 +278,7 @@ class SmetchikRepository {
 
     final merged = <String, CatalogItemModel>{};
     final categories = <String>{};
+    final categoryIcons = <String, String>{};
 
     for (final row in itemRows) {
       final item = CatalogItemModel.fromMap(row);
@@ -203,6 +306,10 @@ class SmetchikRepository {
         );
       } else {
         categories.add(category);
+        final iconKey = (row['icon_key'] as String?)?.trim();
+        if (iconKey != null && iconKey.isNotEmpty) {
+          categoryIcons[category] = iconKey;
+        }
       }
     }
 
@@ -216,7 +323,11 @@ class SmetchikRepository {
     final sortedCategories = categories.toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-    return CatalogData(items: items, categories: sortedCategories);
+    return CatalogData(
+      items: items,
+      categories: sortedCategories,
+      categoryIcons: categoryIcons,
+    );
   }
 
   Future<List<CatalogItemModel>> fetchCatalogItems() async {
@@ -227,9 +338,10 @@ class SmetchikRepository {
     return (await fetchCatalogData()).categories;
   }
 
-  Future<void> saveCatalogCategory(String title) async {
+  Future<void> saveCatalogCategory(String title, {String? iconKey}) async {
     final normalized = _normalizeCatalogCategory(title);
     if (normalized.isEmpty) return;
+    final normalizedIcon = _blankToNull(iconKey) ?? 'handyman';
 
     final existing = await _client
         .from('catalog_categories')
@@ -242,11 +354,12 @@ class SmetchikRepository {
         'user_id': _userId,
         'title': normalized,
         'is_hidden': false,
+        'icon_key': normalizedIcon,
       });
     } else {
       await _client
           .from('catalog_categories')
-          .update({'is_hidden': false})
+          .update({'is_hidden': false, 'icon_key': normalizedIcon})
           .eq('id', existing['id'])
           .eq('user_id', _userId);
     }
@@ -408,6 +521,10 @@ class SmetchikRepository {
     EstimateDraft draft, {
     String? estimateId,
   }) async {
+    if (estimateId == null) {
+      await _ensureCanCreateEstimate();
+    }
+
     String? clientId = draft.clientId;
     if (clientId == null && draft.clientName.trim().isNotEmpty) {
       final client = await saveClient(
@@ -476,10 +593,35 @@ class SmetchikRepository {
     return savedId;
   }
 
+  Future<void> _ensureCanCreateEstimate() async {
+    final profile = await fetchProfile();
+    final limit =
+        profile?.monthlyEstimateLimit ?? ProfileModel.basicMonthlyEstimateLimit;
+    if (profile?.hasActivePro == true) return;
+
+    final createdThisMonth = await countEstimatesCreatedSince(
+      _startOfCurrentMonth(),
+    );
+    if (createdThisMonth >= limit) {
+      throw Exception(
+        'Лимит базового тарифа: $limit смет в месяц. Подключите Профи, чтобы создавать сметы без ограничений.',
+      );
+    }
+  }
+
+  Future<int> countEstimatesCreatedSince(DateTime since) async {
+    final rows = await _client
+        .from('estimates')
+        .select('id')
+        .eq('user_id', _userId)
+        .gte('created_at', since.toUtc().toIso8601String());
+    return rows.length;
+  }
+
   Future<void> updateEstimateStatus(String estimateId, String status) async {
     await _client
         .from('estimates')
-        .update({'status': status})
+        .update({'status': EstimateStatus.normalize(status)})
         .eq('id', estimateId)
         .eq('user_id', _userId);
   }
@@ -502,7 +644,7 @@ class SmetchikRepository {
     final publicUrl = _client.storage.from('estimate-pdfs').getPublicUrl(path);
     await _client
         .from('estimates')
-        .update({'pdf_storage_path': path, 'status': 'sent'})
+        .update({'pdf_storage_path': path, 'status': EstimateStatus.sent})
         .eq('id', estimateId)
         .eq('user_id', _userId);
     return publicUrl;
@@ -551,5 +693,10 @@ class SmetchikRepository {
     if (trimmed.isEmpty) return '';
     final lower = trimmed.toLowerCase();
     return '${lower.substring(0, 1).toUpperCase()}${lower.substring(1)}';
+  }
+
+  static DateTime _startOfCurrentMonth() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month);
   }
 }

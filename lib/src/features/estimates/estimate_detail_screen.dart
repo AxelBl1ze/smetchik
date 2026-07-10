@@ -11,6 +11,7 @@ import '../../data/models.dart';
 import '../../data/pdf_service.dart';
 import '../../data/repository.dart';
 import '../../shared/ui.dart';
+import '../../shared/upgrade_sheet.dart';
 
 class EstimateDetailScreen extends ConsumerWidget {
   const EstimateDetailScreen({super.key, required this.estimateId});
@@ -143,6 +144,17 @@ class EstimateDetailScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
+              onPressed: () => _duplicateEstimate(
+                context,
+                ref,
+                value,
+                profile.asData?.value,
+              ),
+              icon: const Icon(Icons.copy_all_outlined),
+              label: const Text('Дублировать смету'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
               onPressed: () => context.go('/home'),
               icon: const Icon(Icons.home_outlined),
               label: const Text('На главную'),
@@ -179,10 +191,11 @@ class EstimateDetailScreen extends ConsumerWidget {
           downloadFallbackEnabled: true,
         ),
       );
-      if (detail.estimate.status == 'draft') {
+      if (EstimateStatus.normalize(detail.estimate.status) ==
+          EstimateStatus.draft) {
         await ref
             .read(repositoryProvider)
-            .updateEstimateStatus(detail.estimate.id, 'sent');
+            .updateEstimateStatus(detail.estimate.id, EstimateStatus.sent);
       }
       ref.invalidate(estimatesProvider);
       ref.invalidate(estimateDetailProvider(detail.estimate.id));
@@ -216,13 +229,67 @@ class EstimateDetailScreen extends ConsumerWidget {
     ref.invalidate(estimateDetailProvider(estimateId));
     if (!context.mounted) return;
     final message = switch (status) {
-      'approved' => 'Смета принята в работу',
-      'completed' => 'Работа завершена, сумма ушла в полученные',
-      'declined' => 'Смета отклонена',
-      'draft' => 'Смета возвращена в черновик',
+      EstimateStatus.sent => 'Смета отмечена как отправленная',
+      EstimateStatus.accepted => 'Смета принята клиентом',
+      EstimateStatus.inProgress => 'Смета перешла в работу',
+      EstimateStatus.completed => 'Работа завершена, сумма ушла в полученные',
+      EstimateStatus.declined => 'Смета отклонена',
+      EstimateStatus.draft => 'Смета возвращена в черновик',
       _ => 'Статус обновлён',
     };
     _showFloatingSnackBar(context, message);
+  }
+
+  Future<void> _duplicateEstimate(
+    BuildContext context,
+    WidgetRef ref,
+    EstimateDetail detail,
+    ProfileModel? profile,
+  ) async {
+    if (profile?.hasActivePro != true) {
+      _showUpgradeDialog(
+        context,
+        'Дублирование смет доступно на тарифе Профи.',
+      );
+      return;
+    }
+
+    try {
+      final repository = ref.read(repositoryProvider);
+      final copiedAt = DateTime.now().microsecondsSinceEpoch;
+      final copyId = await repository.saveEstimateDraft(
+        EstimateDraft(
+          objectTitle: '${detail.estimate.objectTitle} (копия)',
+          clientId: detail.estimate.clientId,
+          clientName: detail.estimate.client?.name ?? '',
+          clientPhone: detail.estimate.client?.phone,
+          estimateDate: DateTime.now(),
+          durationDays: detail.estimate.durationDays,
+          lines: [
+            for (var i = 0; i < detail.lines.length; i++)
+              detail.lines[i].copyWith(id: 'copy-$i-$copiedAt', sortOrder: i),
+          ],
+        ),
+      );
+      ref.invalidate(estimatesProvider);
+      ref.invalidate(estimateDetailProvider(copyId));
+      if (!context.mounted) return;
+      _showFloatingSnackBar(context, 'Копия сметы создана');
+      context.go('/estimate/$copyId');
+    } catch (error) {
+      if (context.mounted) {
+        _showFloatingSnackBar(context, error.toString(), isError: true);
+      }
+    }
+  }
+
+  void _showUpgradeDialog(BuildContext context, String message) {
+    showUpgradeSheet(
+      context: context,
+      title: 'Нужен тариф Профи',
+      message: message,
+      onOpenPlans: () => context.go('/settings'),
+    );
   }
 
   void _showFloatingSnackBar(
@@ -264,17 +331,45 @@ class _EstimateStatusActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primary = switch (status) {
-      'draft' ||
-      'sent' => ('Принять в работу', Icons.handyman_outlined, 'approved'),
-      'approved' => ('Завершить работу', Icons.done_all, 'completed'),
-      'completed' => ('Вернуть в работу', Icons.undo, 'approved'),
-      'declined' => ('Вернуть в черновик', Icons.undo, 'draft'),
+    final normalizedStatus = EstimateStatus.normalize(status);
+    final primary = switch (normalizedStatus) {
+      EstimateStatus.draft => (
+        'Отметить отправленной',
+        Icons.send_outlined,
+        EstimateStatus.sent,
+      ),
+      EstimateStatus.sent => (
+        'Клиент принял',
+        Icons.thumb_up_alt_outlined,
+        EstimateStatus.accepted,
+      ),
+      EstimateStatus.accepted => (
+        'Начать работу',
+        Icons.handyman_outlined,
+        EstimateStatus.inProgress,
+      ),
+      EstimateStatus.inProgress => (
+        'Завершить работу',
+        Icons.done_all,
+        EstimateStatus.completed,
+      ),
+      EstimateStatus.completed => (
+        'Вернуть в работу',
+        Icons.undo,
+        EstimateStatus.inProgress,
+      ),
+      EstimateStatus.declined => (
+        'Вернуть в черновик',
+        Icons.undo,
+        EstimateStatus.draft,
+      ),
       _ => null,
     };
 
     final canDecline =
-        status == 'draft' || status == 'sent' || status == 'approved';
+        normalizedStatus == EstimateStatus.sent ||
+        normalizedStatus == EstimateStatus.accepted ||
+        normalizedStatus == EstimateStatus.inProgress;
 
     return Padding(
       padding: const EdgeInsets.only(top: 10),
@@ -291,7 +386,7 @@ class _EstimateStatusActions extends StatelessWidget {
           final declineButton = !canDecline
               ? const SizedBox.shrink()
               : OutlinedButton.icon(
-                  onPressed: () => onStatusChanged('declined'),
+                  onPressed: () => onStatusChanged(EstimateStatus.declined),
                   icon: const Icon(Icons.close),
                   label: const Text('Отклонить'),
                 );

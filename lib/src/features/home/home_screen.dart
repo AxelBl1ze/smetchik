@@ -71,7 +71,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               estimates.when(
                 data: (items) {
                   final active = items
-                      .where((estimate) => estimate.status == 'approved')
+                      .where(
+                        (estimate) =>
+                            EstimateStatus.isActiveWork(estimate.status),
+                      )
                       .toList();
                   final activeTotal = active.fold<double>(
                     0,
@@ -83,7 +86,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: _StatCard(
                           label: 'Смет в работе',
                           value: '${active.length}',
-                          sub: 'актуальных',
+                          sub: 'сейчас выполняются',
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -91,7 +94,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: _StatCard(
                           label: 'Денег в работе',
                           value: formatMoney(activeTotal),
-                          sub: 'по принятым сметам',
+                          sub: 'по работам в процессе',
                           accent: true,
                         ),
                       ),
@@ -104,7 +107,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       child: _StatCard(
                         label: 'Смет в работе',
                         value: '—',
-                        sub: 'актуальных',
+                        sub: 'сейчас выполняются',
                       ),
                     ),
                     SizedBox(width: 8),
@@ -112,7 +115,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       child: _StatCard(
                         label: 'Денег в работе',
                         value: '—',
-                        sub: 'сумма',
+                        sub: 'по работам',
                       ),
                     ),
                   ],
@@ -145,14 +148,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               estimates.when(
                 data: (items) {
                   final active = items
-                      .where((estimate) => estimate.status == 'approved')
+                      .where(
+                        (estimate) =>
+                            EstimateStatus.isActiveWork(estimate.status),
+                      )
                       .toList();
                   if (active.isEmpty) {
                     return EmptyState(
                       icon: Icons.assignment_turned_in_outlined,
-                      title: 'Нет смет в работе',
+                      title: 'Нет работ в процессе',
                       body:
-                          'Когда клиент примет смету, отметьте её как принятую в работу.',
+                          'Когда клиент примет смету, откройте её и нажмите «Начать работу».',
                       action: FilledButton.icon(
                         onPressed: () => context.push('/estimate/new'),
                         icon: const Icon(Icons.add),

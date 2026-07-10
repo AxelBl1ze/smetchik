@@ -7,6 +7,7 @@ import '../../data/repository.dart';
 import '../../shared/address_autocomplete_field.dart';
 import '../../shared/russian_phone_input_formatter.dart';
 import '../../shared/ui.dart';
+import '../../shared/upgrade_sheet.dart';
 
 class ClientFormScreen extends ConsumerStatefulWidget {
   const ClientFormScreen({super.key, this.clientId});
@@ -137,6 +138,14 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
       context.go('/clients');
     } catch (error) {
       if (!mounted) return;
+      if (error.toString().contains('Лимит базового тарифа')) {
+        showUpgradeSheet(
+          context: context,
+          message: error.toString().replaceFirst('Exception: ', ''),
+          onOpenPlans: () => context.go('/settings'),
+        );
+        return;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));

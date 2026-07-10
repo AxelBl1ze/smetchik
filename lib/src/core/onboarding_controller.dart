@@ -2,9 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-final onboardingControllerProvider = ChangeNotifierProvider<OnboardingController>((ref) {
-  return OnboardingController()..load();
-});
+final onboardingControllerProvider =
+    ChangeNotifierProvider<OnboardingController>((ref) {
+      return OnboardingController()..load();
+    });
 
 class OnboardingController extends ChangeNotifier {
   static const _key = 'onboarding_seen_v1';

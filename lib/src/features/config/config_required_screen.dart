@@ -22,14 +22,18 @@ class ConfigRequiredScreen extends StatelessWidget {
                   color: AppColors.orangeLight,
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: const Icon(Icons.engineering, color: AppColors.orange, size: 34),
+                child: const Icon(
+                  Icons.engineering,
+                  color: AppColors.orange,
+                  size: 34,
+                ),
               ),
               const SizedBox(height: 22),
               Text(
                 'Сметчик',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+                  fontWeight: FontWeight.w900,
+                ),
               ),
               const SizedBox(height: 8),
               const Text(
@@ -48,7 +52,11 @@ class ConfigRequiredScreen extends StatelessWidget {
               const SizedBox(height: 14),
               const Text(
                 'Для release-сборок используйте те же параметры с flutter build web или flutter build appbundle.',
-                style: TextStyle(color: AppColors.textHint, fontSize: 13, height: 1.4),
+                style: TextStyle(
+                  color: AppColors.textHint,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
               ),
             ],
           ),

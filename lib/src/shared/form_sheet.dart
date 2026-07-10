@@ -98,8 +98,9 @@ class _FormSheet extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: Theme.of(context).textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w900),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                       if (subtitle != null) ...[
                         const SizedBox(height: 4),
@@ -201,7 +202,9 @@ class _ConfirmSheet extends StatelessWidget {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: destructive ? AppColors.dangerBg : AppColors.orangeLight,
+                  color: destructive
+                      ? AppColors.dangerBg
+                      : AppColors.orangeLight,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(
@@ -213,9 +216,9 @@ class _ConfirmSheet extends StatelessWidget {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
               ),
               const SizedBox(height: 8),
               Text(

@@ -6,6 +6,7 @@ import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../../shared/ui.dart';
+import '../../shared/upgrade_sheet.dart';
 
 class ClientsScreen extends ConsumerStatefulWidget {
   const ClientsScreen({super.key});
@@ -20,6 +21,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
   @override
   Widget build(BuildContext context) {
     final clients = ref.watch(clientsProvider);
+    final profile = ref.watch(profileProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= 840;
     return Scaffold(
       appBar: isDesktop
@@ -29,7 +31,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
               actions: [
                 IconButton(
                   tooltip: 'Добавить клиента',
-                  onPressed: () => context.push('/clients/new'),
+                  onPressed: () => _openNewClient(profile, clients),
                   icon: const Icon(Icons.person_add_alt_1),
                 ),
               ],
@@ -48,7 +50,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                       SizedBox(
                         width: 210,
                         child: FilledButton.icon(
-                          onPressed: () => context.push('/clients/new'),
+                          onPressed: () => _openNewClient(profile, clients),
                           icon: const Icon(Icons.person_add_alt_1),
                           label: const Text('Добавить клиента'),
                         ),
@@ -59,6 +61,22 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
             const SizedBox(height: 14),
             _ClientsSearchField(onChanged: _setQuery),
             const SizedBox(height: 12),
+            profile.when(
+              data: (value) => clients.when(
+                data: (items) => _ClientLimitBanner(
+                  profile: value,
+                  clientsCount: items.length,
+                  onUpgrade: _openPlans,
+                ),
+                loading: () => const SizedBox.shrink(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (_, _) => const SizedBox.shrink(),
+            ),
+            profile.asData?.value?.hasActivePro == true
+                ? const SizedBox.shrink()
+                : const SizedBox(height: 12),
             clients.when(
               data: (items) {
                 final filtered = items.where((client) {
@@ -74,7 +92,7 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
                     body:
                         'Добавьте клиента вручную или он появится при создании сметы.',
                     action: FilledButton.icon(
-                      onPressed: () => context.push('/clients/new'),
+                      onPressed: () => _openNewClient(profile, clients),
                       icon: const Icon(Icons.person_add_alt_1),
                       label: const Text('Добавить клиента'),
                     ),
@@ -121,6 +139,109 @@ class _ClientsScreenState extends ConsumerState<ClientsScreen> {
 
   void _setQuery(String value) {
     setState(() => _query = value.trim().toLowerCase());
+  }
+
+  void _openNewClient(
+    AsyncValue<ProfileModel?> profile,
+    AsyncValue<List<ClientModel>> clients,
+  ) {
+    final current = profile.asData?.value;
+    final items = clients.asData?.value ?? const <ClientModel>[];
+    if (current?.hasActivePro != true &&
+        items.length >= ProfileModel.basicClientLimit) {
+      showUpgradeSheet(
+        context: context,
+        message:
+            'На Базовом тарифе можно хранить до ${ProfileModel.basicClientLimit} клиентов. Подключите Профи, чтобы вести клиентскую базу без ограничений.',
+        onOpenPlans: _openPlans,
+      );
+      return;
+    }
+    context.push('/clients/new');
+  }
+
+  void _openPlans() {
+    context.go('/settings');
+  }
+}
+
+class _ClientLimitBanner extends StatelessWidget {
+  const _ClientLimitBanner({
+    required this.profile,
+    required this.clientsCount,
+    required this.onUpgrade,
+  });
+
+  final ProfileModel? profile;
+  final int clientsCount;
+  final VoidCallback onUpgrade;
+
+  @override
+  Widget build(BuildContext context) {
+    if (profile?.hasActivePro == true) return const SizedBox.shrink();
+    final limit = ProfileModel.basicClientLimit;
+    final displayed = clientsCount > limit ? limit : clientsCount;
+    final remaining = limit - displayed;
+    final reached = remaining == 0;
+    return SmetchikCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                reached ? Icons.lock_outline : Icons.group_outlined,
+                color: reached ? AppColors.danger : AppColors.orangeDark,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  reached
+                      ? 'Лимит клиентов исчерпан'
+                      : 'Базовый тариф: $displayed/$limit клиентов',
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+              if (reached)
+                FilledButton(
+                  onPressed: onUpgrade,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  child: const Text('Профи'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              minHeight: 7,
+              value: (clientsCount / limit).clamp(0.0, 1.0),
+              color: reached ? AppColors.danger : AppColors.orange,
+              backgroundColor: AppColors.border,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            reached
+                ? 'Подключите Профи, чтобы добавлять клиентов без ограничений.'
+                : 'Осталось $remaining клиентов на Базовом тарифе.',
+            style: TextStyle(
+              color: reached ? AppColors.danger : AppColors.textHint,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
