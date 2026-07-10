@@ -1292,6 +1292,8 @@ class _CodeInputState extends State<_CodeInput> {
                       autofocus: true,
                       keyboardType: TextInputType.number,
                       textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.oneTimeCode],
+                      enableSuggestions: true,
                       maxLength: 6,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       cursorColor: Colors.transparent,

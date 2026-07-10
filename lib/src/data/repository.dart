@@ -263,12 +263,7 @@ class SmetchikRepository {
           .order('is_custom', ascending: true)
           .order('category')
           .order('title'),
-      _client
-          .from('catalog_categories')
-          .select('title,is_hidden,icon_key')
-          .eq('user_id', _userId)
-          .order('sort_order')
-          .order('title'),
+      _fetchUserCatalogCategoryRows(),
     ]);
 
     final hiddenCategories = results[0] as Set<String>;
@@ -350,19 +345,75 @@ class SmetchikRepository {
         .eq('title', normalized)
         .maybeSingle();
     if (existing == null) {
-      await _client.from('catalog_categories').insert({
+      await _writeCatalogCategoryWithIcon({
         'user_id': _userId,
         'title': normalized,
         'is_hidden': false,
-        'icon_key': normalizedIcon,
-      });
+      }, iconKey: normalizedIcon);
     } else {
+      await _updateCatalogCategoryWithIcon(existing['id'] as String, {
+        'is_hidden': false,
+      }, iconKey: normalizedIcon);
+    }
+  }
+
+  Future<List<dynamic>> _fetchUserCatalogCategoryRows() async {
+    try {
+      return await _client
+          .from('catalog_categories')
+          .select('title,is_hidden,icon_key')
+          .eq('user_id', _userId)
+          .order('sort_order')
+          .order('title');
+    } on PostgrestException catch (error) {
+      if (!_isMissingColumnError(error, 'icon_key')) rethrow;
+      return _client
+          .from('catalog_categories')
+          .select('title,is_hidden')
+          .eq('user_id', _userId)
+          .order('sort_order')
+          .order('title');
+    }
+  }
+
+  Future<void> _writeCatalogCategoryWithIcon(
+    Map<String, dynamic> payload, {
+    required String iconKey,
+  }) async {
+    try {
+      await _client.from('catalog_categories').insert({
+        ...payload,
+        'icon_key': iconKey,
+      });
+    } on PostgrestException catch (error) {
+      if (!_isMissingColumnError(error, 'icon_key')) rethrow;
+      await _client.from('catalog_categories').insert(payload);
+    }
+  }
+
+  Future<void> _updateCatalogCategoryWithIcon(
+    String id,
+    Map<String, dynamic> payload, {
+    required String iconKey,
+  }) async {
+    try {
       await _client
           .from('catalog_categories')
-          .update({'is_hidden': false, 'icon_key': normalizedIcon})
-          .eq('id', existing['id'])
+          .update({...payload, 'icon_key': iconKey})
+          .eq('id', id)
+          .eq('user_id', _userId);
+    } on PostgrestException catch (error) {
+      if (!_isMissingColumnError(error, 'icon_key')) rethrow;
+      await _client
+          .from('catalog_categories')
+          .update(payload)
+          .eq('id', id)
           .eq('user_id', _userId);
     }
+  }
+
+  bool _isMissingColumnError(PostgrestException error, String column) {
+    return error.code == '42703' && error.message.contains(column);
   }
 
   Future<void> deleteCatalogCategory(String category) async {

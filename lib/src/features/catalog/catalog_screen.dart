@@ -13,7 +13,46 @@ import '../../shared/ui.dart';
 
 const _allCategory = 'Все';
 
-IconData _catalogCategoryIcon(String category) {
+class _CatalogIconOption {
+  const _CatalogIconOption(this.key, this.label, this.icon);
+
+  final String key;
+  final String label;
+  final IconData icon;
+}
+
+const _catalogIconOptions = [
+  _CatalogIconOption('handyman', 'Инструмент', Icons.handyman_outlined),
+  _CatalogIconOption('plumbing', 'Сантехника', Icons.plumbing_outlined),
+  _CatalogIconOption(
+    'electric',
+    'Электрика',
+    Icons.electrical_services_outlined,
+  ),
+  _CatalogIconOption('paint', 'Отделка', Icons.format_paint_outlined),
+  _CatalogIconOption('demo', 'Демонтаж', Icons.delete_sweep_outlined),
+  _CatalogIconOption('build', 'Монтаж', Icons.construction_outlined),
+  _CatalogIconOption('tile', 'Плитка', Icons.grid_view_outlined),
+  _CatalogIconOption('floor', 'Полы', Icons.square_foot_outlined),
+  _CatalogIconOption('door', 'Двери', Icons.door_front_door_outlined),
+  _CatalogIconOption('climate', 'Климат', Icons.ac_unit_outlined),
+];
+
+IconData _catalogIconByKey(String? iconKey) {
+  final normalized = iconKey?.trim();
+  if (normalized == null || normalized.isEmpty) {
+    return Icons.handyman_outlined;
+  }
+  for (final option in _catalogIconOptions) {
+    if (option.key == normalized) return option.icon;
+  }
+  return Icons.handyman_outlined;
+}
+
+IconData _catalogCategoryIcon(String category, [String? iconKey]) {
+  if (iconKey != null && iconKey.trim().isNotEmpty) {
+    return _catalogIconByKey(iconKey);
+  }
   final normalized = category.trim().toLowerCase();
   if (normalized == _allCategory.toLowerCase()) return Icons.apps_outlined;
   if (normalized.contains('сантех')) return Icons.plumbing_outlined;
@@ -141,7 +180,11 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               _category == _allCategory || item.category == _category;
           return matchesQuery && matchesCategory;
         }).toList();
-        final entries = _catalogEntries(filtered, isDesktop);
+        final entries = _catalogEntries(
+          filtered,
+          isDesktop,
+          data.categoryIcons,
+        );
         final isEmpty = filtered.isEmpty;
 
         return ListView.builder(
@@ -154,6 +197,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                   isDesktop: isDesktop,
                   sharing: _sharing,
                   categories: categories,
+                  categoryIcons: data.categoryIcons,
                   selectedCategory: _category,
                   onSearchChanged: (value) {
                     setState(() => _query = value.trim().toLowerCase());
@@ -199,6 +243,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               isDesktop: isDesktop,
               sharing: _sharing,
               categories: const [],
+              categoryIcons: const {},
               selectedCategory: _category,
               onSearchChanged: (value) {
                 setState(() => _query = value.trim().toLowerCase());
@@ -221,6 +266,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
               isDesktop: isDesktop,
               sharing: _sharing,
               categories: const [],
+              categoryIcons: const {},
               selectedCategory: _category,
               onSearchChanged: (value) {
                 setState(() => _query = value.trim().toLowerCase());
@@ -241,11 +287,12 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   List<_CatalogListEntry> _catalogEntries(
     List<CatalogItemModel> items,
     bool isDesktop,
+    Map<String, String> categoryIcons,
   ) {
     final grouped = _groupByCategory(items);
     final entries = <_CatalogListEntry>[];
     for (final group in grouped.entries) {
-      entries.add(_CatalogHeaderEntry(group.key));
+      entries.add(_CatalogHeaderEntry(group.key, categoryIcons[group.key]));
       if (isDesktop) {
         for (var i = 0; i < group.value.length; i += 2) {
           entries.add(
@@ -268,7 +315,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     return switch (entry) {
       _CatalogHeaderEntry() => _CatalogSectionHeader(
         title: entry.title,
-        icon: _catalogCategoryIcon(entry.title),
+        icon: _catalogCategoryIcon(entry.title, entry.iconKey),
         onAdd: () => _showWorkSheet(null, entry.title),
         onDelete: () => _deleteCategory(entry.title),
       ),
@@ -337,31 +384,19 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
   }
 
   Future<void> _showCategorySheet() async {
-    final controller = TextEditingController();
-    final saved = await showFormSheet(
+    final result = await showModalBottomSheet<_CategoryEditResult>(
       context: context,
-      title: 'Новый раздел',
-      subtitle: 'Например: Кондиционеры, Электрика, Отделка',
-      confirmLabel: 'Создать',
-      fields: [
-        TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.sentences,
-          decoration: const InputDecoration(
-            labelText: 'Название раздела',
-            hintText: 'Кондиционеры',
-          ),
-          onSubmitted: (_) => Navigator.pop(context, true),
-        ),
-      ],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _CategoryEditorSheet(),
     );
 
-    final title = controller.text.trim();
-    controller.dispose();
-    if (saved != true || title.isEmpty) return;
+    final title = result?.title.trim() ?? '';
+    if (result == null || title.isEmpty) return;
 
-    await ref.read(repositoryProvider).saveCatalogCategory(title);
+    await ref
+        .read(repositoryProvider)
+        .saveCatalogCategory(title, iconKey: result.iconKey);
     await _refreshCatalog();
     if (!mounted) return;
     setState(() => _category = _normalizeCategoryTitle(title));
@@ -570,9 +605,10 @@ sealed class _CatalogListEntry {
 }
 
 class _CatalogHeaderEntry extends _CatalogListEntry {
-  const _CatalogHeaderEntry(this.title);
+  const _CatalogHeaderEntry(this.title, this.iconKey);
 
   final String title;
+  final String? iconKey;
 }
 
 class _CatalogItemEntry extends _CatalogListEntry {
@@ -589,6 +625,254 @@ class _CatalogPairEntry extends _CatalogListEntry {
 }
 
 enum _CatalogAddAction { work, category }
+
+class _CategoryEditResult {
+  const _CategoryEditResult({required this.title, required this.iconKey});
+
+  final String title;
+  final String iconKey;
+}
+
+class _CategoryEditorSheet extends StatefulWidget {
+  const _CategoryEditorSheet();
+
+  @override
+  State<_CategoryEditorSheet> createState() => _CategoryEditorSheetState();
+}
+
+class _CategoryEditorSheetState extends State<_CategoryEditorSheet> {
+  final _title = TextEditingController();
+  var _iconKey = 'handyman';
+
+  @override
+  void dispose() {
+    _title.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Container(
+              margin: const EdgeInsets.all(10),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.16),
+                    blurRadius: 28,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const _CatalogSheetTitle(
+                      icon: Icons.create_new_folder_outlined,
+                      title: 'Новый раздел',
+                      subtitle: 'Название и иконка для прайс-листа',
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _title,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.sentences,
+                      textInputAction: TextInputAction.done,
+                      decoration: const InputDecoration(
+                        labelText: 'Название раздела',
+                        hintText: 'Кондиционеры',
+                      ),
+                      onSubmitted: (_) => _submit(),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'Иконка раздела',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final option in _catalogIconOptions)
+                          _CategoryIconChoice(
+                            option: option,
+                            selected: _iconKey == option.key,
+                            onTap: () => setState(() => _iconKey = option.key),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Отмена'),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _submit,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Создать'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    final title = _title.text.trim();
+    if (title.isEmpty) return;
+    Navigator.of(
+      context,
+    ).pop(_CategoryEditResult(title: title, iconKey: _iconKey));
+  }
+}
+
+class _CategoryIconChoice extends StatelessWidget {
+  const _CategoryIconChoice({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _CatalogIconOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: 94,
+        padding: const EdgeInsets.all(9),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.orangeLight : AppColors.background,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? AppColors.orange : AppColors.border,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              option.icon,
+              color: selected ? AppColors.orange : AppColors.textSecondary,
+            ),
+            const SizedBox(height: 5),
+            Text(
+              option.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: selected ? AppColors.orangeDark : AppColors.graphite,
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CatalogSheetTitle extends StatelessWidget {
+  const _CatalogSheetTitle({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: AppColors.orangeLight,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: AppColors.orangeDark, size: 20),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _CatalogAddSheet extends StatelessWidget {
   const _CatalogAddSheet();
@@ -764,6 +1048,7 @@ class _CatalogHeader extends StatelessWidget {
     required this.isDesktop,
     required this.sharing,
     required this.categories,
+    required this.categoryIcons,
     required this.selectedCategory,
     required this.onSearchChanged,
     required this.onShare,
@@ -775,6 +1060,7 @@ class _CatalogHeader extends StatelessWidget {
   final bool isDesktop;
   final bool sharing;
   final List<String> categories;
+  final Map<String, String> categoryIcons;
   final String selectedCategory;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onShare;
@@ -833,6 +1119,7 @@ class _CatalogHeader extends StatelessWidget {
           const SizedBox(height: 12),
           _CategoryChips(
             categories: categories,
+            categoryIcons: categoryIcons,
             selected: selectedCategory,
             onSelected: onCategorySelected,
             onAddCategory: onAddCategory,
@@ -918,12 +1205,14 @@ class _CatalogToolbar extends StatelessWidget {
 class _CategoryChips extends StatelessWidget {
   const _CategoryChips({
     required this.categories,
+    required this.categoryIcons,
     required this.selected,
     required this.onSelected,
     required this.onAddCategory,
   });
 
   final List<String> categories;
+  final Map<String, String> categoryIcons;
   final String selected;
   final ValueChanged<String> onSelected;
   final VoidCallback onAddCategory;
@@ -976,20 +1265,70 @@ class _CategoryChips extends StatelessWidget {
           for (final category in [_allCategory, ...categories])
             Padding(
               padding: const EdgeInsets.only(right: 6),
-              child: ChoiceChip(
+              child: _CategoryPill(
+                category: category,
                 selected: selected == category,
-                avatar: Icon(
-                  _catalogCategoryIcon(category),
-                  size: 18,
-                  color: selected == category
-                      ? AppColors.orange
-                      : AppColors.textSecondary,
-                ),
-                label: Text(category),
-                onSelected: (_) => onSelected(category),
+                icon: _catalogCategoryIcon(category, categoryIcons[category]),
+                onTap: () => onSelected(category),
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _CategoryPill extends StatelessWidget {
+  const _CategoryPill({
+    required this.category,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String category;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.orangeLight : AppColors.card,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected ? AppColors.orange : AppColors.border,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: selected ? AppColors.orange : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              category,
+              style: TextStyle(
+                color: selected ? AppColors.orangeDark : AppColors.graphite,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            if (selected) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.check, size: 16, color: AppColors.orange),
+            ],
+          ],
+        ),
       ),
     );
   }

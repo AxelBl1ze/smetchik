@@ -86,7 +86,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             .read(repositoryProvider)
                             .logoPublicUrl(value?.logoPath),
                         busy: _saving,
-                        onTap: _pickAvatar,
+                        onTap: _showAvatarSheet,
                       );
                       final name = _ProfileNameField(
                         controller: _name,
@@ -130,20 +130,66 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       );
                     },
                   ),
-                  const SizedBox(height: 14),
-                  estimates.when(
-                    data: (items) => _ProfileStats(estimates: items),
-                    loading: () => const _ProfileStatsSkeleton(),
-                    error: (_, _) => const SizedBox.shrink(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            SmetchikCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _CardTitle(
+                    icon: Icons.badge_outlined,
+                    title: 'Информация мастера',
+                    subtitle: 'Телефон, специализация и валюта',
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _phone,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: const [RussianPhoneInputFormatter()],
+                    decoration: const InputDecoration(
+                      labelText: 'Телефон',
+                      prefixIcon: Icon(Icons.phone_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SpecializationField(controller: _spec),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _currency,
+                    decoration: const InputDecoration(
+                      labelText: 'Валюта',
+                      prefixIcon: Icon(Icons.payments_outlined),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'RUB',
+                        child: Text('₽ Российский рубль'),
+                      ),
+                      DropdownMenuItem(value: 'USD', child: Text('\$ Доллар')),
+                      DropdownMenuItem(value: 'EUR', child: Text('€ Евро')),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _currency = value ?? 'RUB'),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 14),
             estimates.when(
-              data: (items) => _AdvancedStatsCard(
+              data: (items) =>
+                  SmetchikCard(child: _ProfileStats(estimates: items)),
+              loading: () => const SmetchikCard(child: _ProfileStatsSkeleton()),
+              error: (_, _) => const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 14),
+            estimates.when(
+              data: (items) => _AdvancedStatsLauncherCard(
                 profile: value,
                 estimates: items,
+                onOpen: () => _showAdvancedStatsSheet(value, items),
                 onUpgrade: () => _showTariffSheet(value),
               ),
               loading: () => const _AdvancedStatsSkeleton(),
@@ -183,63 +229,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onBasic: _switchToBasicPlan,
             ),
             const SizedBox(height: 14),
-            SmetchikCard(
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _phone,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: const [RussianPhoneInputFormatter()],
-                    decoration: const InputDecoration(
-                      labelText: 'Телефон',
-                      prefixIcon: Icon(Icons.phone_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SpecializationField(controller: _spec),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: _currency,
-                    decoration: const InputDecoration(
-                      labelText: 'Валюта',
-                      prefixIcon: Icon(Icons.payments_outlined),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'RUB',
-                        child: Text('₽ Российский рубль'),
-                      ),
-                      DropdownMenuItem(value: 'USD', child: Text('\$ Доллар')),
-                      DropdownMenuItem(value: 'EUR', child: Text('€ Евро')),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _currency = value ?? 'RUB'),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            _PdfSettingsCard(
+            _PdfSettingsLauncherCard(
               profile: value,
-              busy: _saving,
-              showBrandHeader: _pdfShowBrandHeader,
-              showSignatures: _pdfShowSignatures,
-              showServiceMark: _pdfShowServiceMark,
               template: _pdfTemplate,
               accentColor: _pdfAccentColor,
-              paymentTerms: _pdfPaymentTerms,
-              footerNote: _pdfFooterNote,
-              onTemplateChanged: (next) => setState(() => _pdfTemplate = next),
-              onAccentColorChanged: (next) =>
-                  setState(() => _pdfAccentColor = next),
-              onShowBrandHeaderChanged: (next) =>
-                  setState(() => _pdfShowBrandHeader = next),
-              onShowSignaturesChanged: (next) =>
-                  setState(() => _pdfShowSignatures = next),
-              onShowServiceMarkChanged: (next) =>
-                  setState(() => _pdfShowServiceMark = next),
-              onSave: _savePdfSettings,
+              onOpen: () => _showPdfSettingsSheet(value),
               onUpgrade: () => _showTariffSheet(value),
             ),
             const SizedBox(height: 16),
@@ -325,6 +319,90 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _showAvatarSheet() async {
+    if (_saving) return;
+    final pick = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _AvatarPickerSheet(),
+    );
+    if (pick == true) {
+      await _pickAvatar();
+    }
+  }
+
+  Future<void> _showAdvancedStatsSheet(
+    ProfileModel? profile,
+    List<EstimateModel> estimates,
+  ) async {
+    if (profile?.hasActivePro != true) {
+      await _showTariffSheet(profile);
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _SettingsFeatureSheet(
+        maxWidth: 760,
+        child: _AdvancedStatsCard(
+          profile: profile,
+          estimates: estimates,
+          onUpgrade: () {
+            Navigator.of(sheetContext).pop();
+            _showTariffSheet(profile);
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPdfSettingsSheet(ProfileModel? profile) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          void update(VoidCallback change) {
+            setState(change);
+            setSheetState(() {});
+          }
+
+          return _SettingsFeatureSheet(
+            maxWidth: 820,
+            child: _PdfSettingsCard(
+              profile: profile,
+              busy: _saving,
+              showBrandHeader: _pdfShowBrandHeader,
+              showSignatures: _pdfShowSignatures,
+              showServiceMark: _pdfShowServiceMark,
+              template: _pdfTemplate,
+              accentColor: _pdfAccentColor,
+              paymentTerms: _pdfPaymentTerms,
+              footerNote: _pdfFooterNote,
+              onTemplateChanged: (next) => update(() => _pdfTemplate = next),
+              onAccentColorChanged: (next) =>
+                  update(() => _pdfAccentColor = next),
+              onShowBrandHeaderChanged: (next) =>
+                  update(() => _pdfShowBrandHeader = next),
+              onShowSignaturesChanged: (next) =>
+                  update(() => _pdfShowSignatures = next),
+              onShowServiceMarkChanged: (next) =>
+                  update(() => _pdfShowServiceMark = next),
+              onSave: _savePdfSettings,
+              onUpgrade: () {
+                Navigator.of(sheetContext).pop();
+                _showTariffSheet(profile);
+              },
+            ),
+          );
+        },
+      ),
+    );
   }
 
   String _guessImageMimeType(String name) {
@@ -656,6 +734,140 @@ class _AvatarButton extends StatelessWidget {
   }
 }
 
+class _AvatarPickerSheet extends StatelessWidget {
+  const _AvatarPickerSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const _CardTitle(
+                  icon: Icons.account_circle_outlined,
+                  title: 'Аватар мастера',
+                  subtitle: 'Фото будет показываться в профиле',
+                ),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Выбрать из галереи'),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Отмена'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsFeatureSheet extends StatelessWidget {
+  const _SettingsFeatureSheet({required this.child, required this.maxWidth});
+
+  final Widget child;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: Container(
+              margin: const EdgeInsets.all(10),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(26),
+                border: Border.all(color: AppColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.18),
+                    blurRadius: 34,
+                    offset: const Offset(0, 16),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(26),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.border,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      child,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AdvancedStatsCard extends StatelessWidget {
   const _AdvancedStatsCard({
     required this.profile,
@@ -742,6 +954,75 @@ class _AdvancedStatsSkeleton extends StatelessWidget {
         icon: Icons.insights_outlined,
         title: 'Рабочая статистика',
         subtitle: 'Загружаем данные',
+      ),
+    );
+  }
+}
+
+class _AdvancedStatsLauncherCard extends StatelessWidget {
+  const _AdvancedStatsLauncherCard({
+    required this.profile,
+    required this.estimates,
+    required this.onOpen,
+    required this.onUpgrade,
+  });
+
+  final ProfileModel? profile;
+  final List<EstimateModel> estimates;
+  final VoidCallback onOpen;
+  final VoidCallback onUpgrade;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPro = profile?.hasActivePro == true;
+    final stats = _AdvancedStatsData.fromEstimates(estimates);
+    return SmetchikCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _CardTitle(
+            icon: Icons.insights_outlined,
+            title: 'Расширенная статистика',
+            subtitle: 'Воронка, деньги по этапам и действия',
+          ),
+          const SizedBox(height: 12),
+          if (hasPro)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _SubscriptionChip(
+                  icon: Icons.task_alt_outlined,
+                  label: '${stats.activeActionCount} требуют внимания',
+                ),
+                _SubscriptionChip(
+                  icon: Icons.trending_up_outlined,
+                  label: '${stats.conversionPercent}% конверсия',
+                ),
+                _SubscriptionChip(
+                  icon: Icons.payments_outlined,
+                  label: formatMoney(stats.monthTotal),
+                ),
+              ],
+            )
+          else
+            const _LockedFeatureBanner(
+              text:
+                  'В Pro видно, какие сметы ждут действия, сколько денег в работе и где проседает воронка.',
+            ),
+          const SizedBox(height: 12),
+          hasPro
+              ? FilledButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.open_in_full),
+                  label: const Text('Открыть статистику'),
+                )
+              : FilledButton.icon(
+                  onPressed: onUpgrade,
+                  icon: const Icon(Icons.workspace_premium),
+                  label: const Text('Оформить Профи'),
+                ),
+        ],
       ),
     );
   }
@@ -991,6 +1272,7 @@ class _NextActionsPanel extends StatelessWidget {
 
               if (compact) {
                 return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     for (final tile in tiles) ...[
                       tile,
@@ -1158,6 +1440,7 @@ class _StatsInsightRow extends StatelessWidget {
 
     if (compact) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final tile in tiles) ...[
             tile,
@@ -1432,6 +1715,148 @@ class _AnalyticsTile extends StatelessWidget {
   }
 }
 
+class _PdfStylePreset {
+  const _PdfStylePreset({
+    required this.title,
+    required this.subtitle,
+    required this.template,
+    required this.accentColor,
+    required this.icon,
+  });
+
+  final String title;
+  final String subtitle;
+  final String template;
+  final String accentColor;
+  final IconData icon;
+}
+
+const _pdfStylePresets = [
+  _PdfStylePreset(
+    title: 'Фирменный',
+    subtitle: 'оранжевая шапка',
+    template: PdfTemplate.accent,
+    accentColor: PdfAccentColor.orange,
+    icon: Icons.bolt_outlined,
+  ),
+  _PdfStylePreset(
+    title: 'Строгий КП',
+    subtitle: 'графит и белый лист',
+    template: PdfTemplate.classic,
+    accentColor: PdfAccentColor.graphite,
+    icon: Icons.article_outlined,
+  ),
+  _PdfStylePreset(
+    title: 'Доверие',
+    subtitle: 'зелёный акцент',
+    template: PdfTemplate.accent,
+    accentColor: PdfAccentColor.green,
+    icon: Icons.verified_outlined,
+  ),
+  _PdfStylePreset(
+    title: 'Технический',
+    subtitle: 'синий деловой стиль',
+    template: PdfTemplate.classic,
+    accentColor: PdfAccentColor.blue,
+    icon: Icons.engineering_outlined,
+  ),
+  _PdfStylePreset(
+    title: 'Компактный',
+    subtitle: 'больше работ на странице',
+    template: PdfTemplate.compact,
+    accentColor: PdfAccentColor.orange,
+    icon: Icons.view_agenda_outlined,
+  ),
+];
+
+class _PdfSettingsLauncherCard extends StatelessWidget {
+  const _PdfSettingsLauncherCard({
+    required this.profile,
+    required this.template,
+    required this.accentColor,
+    required this.onOpen,
+    required this.onUpgrade,
+  });
+
+  final ProfileModel? profile;
+  final String template;
+  final String accentColor;
+  final VoidCallback onOpen;
+  final VoidCallback onUpgrade;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPro = profile?.hasActivePro == true;
+    return SmetchikCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _CardTitle(
+            icon: Icons.picture_as_pdf_outlined,
+            title: 'Оформление PDF',
+            subtitle: 'Шаблоны, цвета, подписи и предпросмотр',
+          ),
+          const SizedBox(height: 12),
+          if (hasPro)
+            Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: _colorFromHex(accentColor),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.description_outlined,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        PdfTemplate.label(template),
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      Text(
+                        '${PdfAccentColor.label(accentColor)} · предпросмотр внутри редактора',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else
+            const _LockedFeatureBanner(
+              text:
+                  'На Базовом тарифе PDF создаётся в стандартном стиле. В Pro можно выбрать оформление и скрыть отметку Сметчика.',
+            ),
+          const SizedBox(height: 12),
+          hasPro
+              ? FilledButton.icon(
+                  onPressed: onOpen,
+                  icon: const Icon(Icons.tune),
+                  label: const Text('Редактировать PDF'),
+                )
+              : FilledButton.icon(
+                  onPressed: onUpgrade,
+                  icon: const Icon(Icons.workspace_premium),
+                  label: const Text('Оформить Профи'),
+                ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PdfSettingsCard extends StatelessWidget {
   const _PdfSettingsCard({
     required this.profile,
@@ -1495,6 +1920,16 @@ class _PdfSettingsCard extends StatelessWidget {
               final controls = Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _PdfPresetPicker(
+                    selectedTemplate: template,
+                    selectedAccentColor: accentColor,
+                    enabled: hasPro && !busy,
+                    onSelected: (preset) {
+                      onTemplateChanged(preset.template);
+                      onAccentColorChanged(preset.accentColor);
+                    },
+                  ),
+                  const SizedBox(height: 12),
                   _PdfTemplatePicker(
                     selected: template,
                     enabled: hasPro && !busy,
@@ -1606,6 +2041,125 @@ class _PdfSettingsCard extends StatelessWidget {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PdfPresetPicker extends StatelessWidget {
+  const _PdfPresetPicker({
+    required this.selectedTemplate,
+    required this.selectedAccentColor,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final String selectedTemplate;
+  final String selectedAccentColor;
+  final bool enabled;
+  final ValueChanged<_PdfStylePreset> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _FieldCaption('Готовые оформления'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final preset in _pdfStylePresets)
+              _PdfPresetChip(
+                preset: preset,
+                selected:
+                    PdfTemplate.normalize(preset.template) ==
+                        PdfTemplate.normalize(selectedTemplate) &&
+                    PdfAccentColor.normalize(preset.accentColor) ==
+                        PdfAccentColor.normalize(selectedAccentColor),
+                enabled: enabled,
+                onTap: () => onSelected(preset),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PdfPresetChip extends StatelessWidget {
+  const _PdfPresetChip({
+    required this.preset,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final _PdfStylePreset preset;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _colorFromHex(preset.accentColor);
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        width: 148,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.orangeLight : AppColors.background,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? AppColors.orange : AppColors.border,
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(preset.icon, color: Colors.white, size: 18),
+                ),
+                const Spacer(),
+                Icon(
+                  selected ? Icons.check_circle : Icons.circle_outlined,
+                  color: selected ? AppColors.orange : AppColors.textHint,
+                  size: 18,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              preset.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900),
+            ),
+            Text(
+              preset.subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3204,6 +3758,7 @@ class _ProfileStats extends StatelessWidget {
 
         if (compact) {
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (final card in cards) ...[
                 card,
@@ -3232,6 +3787,7 @@ class _ProfileStatsSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _ProfileStatCard(
           icon: Icons.receipt_long_outlined,
