@@ -13,9 +13,14 @@ import '../../shared/ui.dart';
 import '../../shared/upgrade_sheet.dart';
 
 class EstimateFormScreen extends ConsumerStatefulWidget {
-  const EstimateFormScreen({super.key, this.estimateId});
+  const EstimateFormScreen({
+    super.key,
+    this.estimateId,
+    this.createRevision = false,
+  });
 
   final String? estimateId;
+  final bool createRevision;
 
   @override
   ConsumerState<EstimateFormScreen> createState() => _EstimateFormScreenState();
@@ -32,8 +37,10 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
   final List<EstimateLineModel> _lines = [];
   bool _saving = false;
   bool _hydrated = false;
+  int _sourceDocumentVersion = 1;
 
   bool get _isEdit => widget.estimateId != null;
+  bool get _isRevision => widget.createRevision && _isEdit;
   double get _total => _lines.fold(0, (sum, line) => sum + line.lineTotal);
 
   @override
@@ -64,7 +71,13 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEdit ? 'Редактировать смету' : 'Новая смета'),
+        title: Text(
+          _isRevision
+              ? 'Новая версия сметы'
+              : _isEdit
+              ? 'Редактировать смету'
+              : 'Новая смета',
+        ),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
@@ -92,7 +105,7 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
       child: ResponsiveListView(
         maxWidth: 920,
         children: [
-          if (!_isEdit)
+          if (!_isEdit || _isRevision)
             profile.when(
               data: (value) => _EstimateLimitBanner(
                 profile: value,
@@ -102,7 +115,7 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
               loading: () => const SizedBox.shrink(),
               error: (_, _) => const SizedBox.shrink(),
             ),
-          if (!_isEdit) const SizedBox(height: 12),
+          if (!_isEdit || _isRevision) const SizedBox(height: 12),
           AddressAutocompleteField(
             controller: _object,
             labelText: 'Название объекта / адрес',
@@ -270,7 +283,13 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
                     ),
                   )
                 : const Icon(Icons.save),
-            label: Text(_isEdit ? 'Сохранить изменения' : 'Сохранить смету'),
+            label: Text(
+              _isRevision
+                  ? 'Создать новую версию'
+                  : _isEdit
+                  ? 'Сохранить изменения'
+                  : 'Сохранить смету',
+            ),
           ),
         ],
       ),
@@ -289,6 +308,7 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
       );
       _duration.text = detail.estimate.durationDays?.toString() ?? '';
       _date = detail.estimate.estimateDate;
+      _sourceDocumentVersion = detail.estimate.documentVersion;
       _lines
         ..clear()
         ..addAll(detail.lines);
@@ -441,7 +461,9 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
               durationDays: int.tryParse(_duration.text),
               lines: _lines,
             ),
-            estimateId: widget.estimateId,
+            estimateId: _isRevision ? null : widget.estimateId,
+            revisionOf: _isRevision ? widget.estimateId : null,
+            documentVersion: _isRevision ? _sourceDocumentVersion + 1 : null,
           );
       ref.invalidate(estimatesProvider);
       ref.invalidate(clientsProvider);

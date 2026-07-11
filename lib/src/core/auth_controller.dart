@@ -47,12 +47,19 @@ class AuthController extends ChangeNotifier {
     required String email,
     required String password,
     required String fullName,
+    required String termsVersion,
+    required String privacyVersion,
   }) async {
     await _run(() async {
       final response = await _client!.auth.signUp(
         email: email.trim(),
         password: password,
-        data: {'full_name': fullName.trim()},
+        data: {
+          'full_name': fullName.trim(),
+          'legal_terms_version': termsVersion,
+          'legal_privacy_version': privacyVersion,
+          'legal_accepted_at': DateTime.now().toUtc().toIso8601String(),
+        },
       );
       if (response.session == null && response.user != null) {
         throw const AuthException(

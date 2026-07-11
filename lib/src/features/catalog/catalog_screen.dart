@@ -7,7 +7,6 @@ import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/pdf_service.dart';
 import '../../data/repository.dart';
-import '../../shared/app_shell.dart';
 import '../../shared/form_sheet.dart';
 import '../../shared/ui.dart';
 
@@ -74,17 +73,6 @@ IconData _catalogCategoryIcon(String category, [String? iconKey]) {
     return Icons.settings_input_antenna_outlined;
   }
   return Icons.handyman_outlined;
-}
-
-/// Обёртка маршрута: на десктопе — вкладка в shell, на телефоне — отдельный экран.
-class CatalogRoute extends StatelessWidget {
-  const CatalogRoute({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    const screen = CatalogScreen();
-    return const AppShell(selectedIndex: 2, child: screen);
-  }
 }
 
 class CatalogScreen extends ConsumerStatefulWidget {

@@ -1,10 +1,15 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/auth_controller.dart';
 import '../../data/models.dart';
+import '../../data/pdf_templates.dart';
 import '../../data/repository.dart';
 import '../../shared/russian_phone_input_formatter.dart';
 import '../../shared/specialization_field.dart';
@@ -24,9 +29,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _spec = TextEditingController();
   final _pdfPaymentTerms = TextEditingController();
   final _pdfFooterNote = TextEditingController();
+  final _paymentQrLabel = TextEditingController();
+  final _contactQrLabel = TextEditingController();
   final _nameFocus = FocusNode();
   String _currency = 'RUB';
-  String _pdfTemplate = PdfTemplate.accent;
+  String _pdfTemplate = PdfTemplate.brightAccent;
   String _pdfAccentColor = PdfAccentColor.orange;
   bool _pdfShowBrandHeader = true;
   bool _pdfShowSignatures = true;
@@ -52,6 +59,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _spec.dispose();
     _pdfPaymentTerms.dispose();
     _pdfFooterNote.dispose();
+    _paymentQrLabel.dispose();
+    _contactQrLabel.dispose();
     _nameFocus.dispose();
     super.dispose();
   }
@@ -178,6 +187,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            _SignatureSettingsCard(
+              signatureUrl:
+                  value?.signatureUrl ??
+                  ref
+                      .read(repositoryProvider)
+                      .signaturePublicUrl(value?.signaturePath),
+              busy: _saving,
+              onTap: _showSignatureSheet,
+            ),
+            const SizedBox(height: 14),
+            _QrSettingsCard(
+              paymentQrUrl:
+                  value?.paymentQrUrl ??
+                  ref
+                      .read(repositoryProvider)
+                      .qrPublicUrl(value?.paymentQrPath),
+              contactQrUrl:
+                  value?.contactQrUrl ??
+                  ref
+                      .read(repositoryProvider)
+                      .qrPublicUrl(value?.contactQrPath),
+              paymentLabel: _paymentQrLabel,
+              contactLabel: _contactQrLabel,
+              busy: _saving,
+              onPickPayment: () => _pickProfileQr(_ProfileQrKind.payment),
+              onPickContact: () => _pickProfileQr(_ProfileQrKind.contact),
+            ),
+            const SizedBox(height: 14),
             estimates.when(
               data: (items) =>
                   SmetchikCard(child: _ProfileStats(estimates: items)),
@@ -282,6 +319,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 );
               },
             ),
+            const SizedBox(height: 18),
+            _LegalDocumentsCard(onTap: () => context.push('/legal')),
           ],
         ),
         loading: () => const LoadingPane(),
@@ -330,6 +369,77 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     if (pick == true) {
       await _pickAvatar();
+    }
+  }
+
+  Future<void> _showSignatureSheet() async {
+    if (_saving) return;
+    final bytes = await showModalBottomSheet<Uint8List>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _SignaturePadSheet(),
+    );
+    if (bytes == null) return;
+
+    setState(() => _saving = true);
+    try {
+      await ref.read(repositoryProvider).uploadProfileSignature(bytes: bytes);
+      ref.invalidate(profileProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Роспись сохранена')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _pickProfileQr(_ProfileQrKind kind) async {
+    if (_saving) return;
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1400,
+      imageQuality: 92,
+    );
+    if (picked == null) return;
+
+    setState(() => _saving = true);
+    try {
+      final bytes = await picked.readAsBytes();
+      final mimeType = picked.mimeType ?? _guessImageMimeType(picked.name);
+      await ref
+          .read(repositoryProvider)
+          .uploadProfileQr(
+            kind: kind.storageKey,
+            bytes: bytes,
+            contentType: mimeType,
+          );
+      ref.invalidate(profileProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            kind == _ProfileQrKind.payment
+                ? 'QR оплаты обновлён'
+                : 'QR для связи обновлён',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -546,6 +656,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _pdfShowServiceMark = profile.pdfShowServiceMark;
     _pdfPaymentTerms.text = profile.pdfPaymentTerms ?? '';
     _pdfFooterNote.text = profile.pdfFooterNote ?? '';
+    _paymentQrLabel.text = profile.paymentQrLabel ?? 'Оплата по QR';
+    _contactQrLabel.text = profile.contactQrLabel ?? 'Связаться с мастером';
   }
 
   Future<void> _save() async {
@@ -557,6 +669,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             fullName: _name.text,
             phone: _phone.text,
             specialization: normalizeSpecialization(_spec.text),
+            paymentQrLabel: _paymentQrLabel.text,
+            contactQrLabel: _contactQrLabel.text,
             currency: _currency,
           );
       ref.invalidate(profileProvider);
@@ -799,6 +913,525 @@ class _AvatarPickerSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+class _LegalDocumentsCard extends StatelessWidget {
+  const _LegalDocumentsCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SmetchikCard(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.orangeLight,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.gavel_outlined,
+                  color: AppColors.orange,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Правовая информация',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      'Соглашение, конфиденциальность и подписка',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.textHint),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SignatureSettingsCard extends StatelessWidget {
+  const _SignatureSettingsCard({
+    required this.signatureUrl,
+    required this.busy,
+    required this.onTap,
+  });
+
+  final String? signatureUrl;
+  final bool busy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSignature = signatureUrl != null && signatureUrl!.isNotEmpty;
+    return SmetchikCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _CardTitle(
+            icon: Icons.draw_outlined,
+            title: 'Роспись мастера',
+            subtitle: 'Автоматически добавляется в PDF-сметы',
+          ),
+          const SizedBox(height: 12),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            height: 86,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: hasSignature
+                ? Image.network(
+                    signatureUrl!,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.centerLeft,
+                    errorBuilder: (context, error, stackTrace) => const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Роспись не удалось показать',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  )
+                : const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Пока пусто',
+                      style: TextStyle(
+                        color: AppColors.textHint,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: busy ? null : onTap,
+            icon: Icon(hasSignature ? Icons.edit_outlined : Icons.gesture),
+            label: Text(hasSignature ? 'Перерисовать' : 'Добавить роспись'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _ProfileQrKind {
+  payment('payment'),
+  contact('contact');
+
+  const _ProfileQrKind(this.storageKey);
+
+  final String storageKey;
+}
+
+class _QrSettingsCard extends StatelessWidget {
+  const _QrSettingsCard({
+    required this.paymentQrUrl,
+    required this.contactQrUrl,
+    required this.paymentLabel,
+    required this.contactLabel,
+    required this.busy,
+    required this.onPickPayment,
+    required this.onPickContact,
+  });
+
+  final String? paymentQrUrl;
+  final String? contactQrUrl;
+  final TextEditingController paymentLabel;
+  final TextEditingController contactLabel;
+  final bool busy;
+  final VoidCallback onPickPayment;
+  final VoidCallback onPickContact;
+
+  @override
+  Widget build(BuildContext context) {
+    return SmetchikCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _CardTitle(
+            icon: Icons.qr_code_2_outlined,
+            title: 'Оплата и связь',
+            subtitle: 'QR для оплаты или быстрого контакта в PDF',
+          ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = _isNarrowLayout(constraints, 580);
+              final payment = _QrSettingTile(
+                title: 'QR оплаты',
+                subtitle: 'СБП, банк, ссылка на оплату',
+                imageUrl: paymentQrUrl,
+                label: paymentLabel,
+                buttonLabel: paymentQrUrl?.isNotEmpty == true
+                    ? 'Заменить QR'
+                    : 'Загрузить QR',
+                busy: busy,
+                onPick: onPickPayment,
+              );
+              final contact = _QrSettingTile(
+                title: 'QR для связи',
+                subtitle: 'Telegram, WhatsApp, сайт или соцсеть',
+                imageUrl: contactQrUrl,
+                label: contactLabel,
+                buttonLabel: contactQrUrl?.isNotEmpty == true
+                    ? 'Заменить QR'
+                    : 'Загрузить QR',
+                busy: busy,
+                onPick: onPickContact,
+              );
+
+              if (compact) {
+                return Column(
+                  children: [payment, const SizedBox(height: 10), contact],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: payment),
+                  const SizedBox(width: 10),
+                  Expanded(child: contact),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QrSettingTile extends StatelessWidget {
+  const _QrSettingTile({
+    required this.title,
+    required this.subtitle,
+    required this.imageUrl,
+    required this.label,
+    required this.buttonLabel,
+    required this.busy,
+    required this.onPick,
+  });
+
+  final String title;
+  final String subtitle;
+  final String? imageUrl;
+  final TextEditingController label;
+  final String buttonLabel;
+  final bool busy;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _QrPreviewBox(imageUrl: imageUrl),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: label,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Подпись под QR',
+              hintText: 'Например: Оплата по СБП',
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: busy ? null : onPick,
+            icon: Icon(hasImage ? Icons.sync : Icons.upload_file_outlined),
+            label: Text(buttonLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QrPreviewBox extends StatelessWidget {
+  const _QrPreviewBox({required this.imageUrl});
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    return Container(
+      width: 74,
+      height: 74,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: hasImage
+          ? Image.network(
+              imageUrl!,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) =>
+                  const Icon(Icons.qr_code_2, color: AppColors.textHint),
+            )
+          : const Icon(Icons.qr_code_2, color: AppColors.textHint, size: 34),
+    );
+  }
+}
+
+class _SignaturePadSheet extends StatefulWidget {
+  const _SignaturePadSheet();
+
+  @override
+  State<_SignaturePadSheet> createState() => _SignaturePadSheetState();
+}
+
+class _SignaturePadSheetState extends State<_SignaturePadSheet> {
+  final _paintKey = GlobalKey();
+  final List<List<Offset>> _strokes = [];
+
+  bool get _hasSignature => _strokes.any((stroke) => stroke.length > 1);
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        heightFactor: 1,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 620),
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Expanded(
+                      child: _CardTitle(
+                        icon: Icons.draw_outlined,
+                        title: 'Роспись для смет',
+                        subtitle: 'Распишитесь пальцем, стилусом или мышью',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Закрыть',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: AspectRatio(
+                      aspectRatio: 2.6,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onPanStart: (details) =>
+                            _startStroke(details.localPosition),
+                        onPanUpdate: (details) =>
+                            _appendPoint(details.localPosition),
+                        child: CustomPaint(
+                          key: _paintKey,
+                          painter: _SignaturePainter(strokes: _strokes),
+                          child: _hasSignature
+                              ? const SizedBox.expand()
+                              : const Center(
+                                  child: Text(
+                                    'место для росписи',
+                                    style: TextStyle(
+                                      color: AppColors.textHint,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _hasSignature ? _clear : null,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Очистить'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _hasSignature ? _save : null,
+                        icon: const Icon(Icons.check),
+                        label: const Text('Сохранить'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _startStroke(Offset point) {
+    setState(() => _strokes.add([point]));
+  }
+
+  void _appendPoint(Offset point) {
+    if (_strokes.isEmpty) return;
+    setState(() => _strokes.last.add(point));
+  }
+
+  void _clear() {
+    setState(_strokes.clear);
+  }
+
+  Future<void> _save() async {
+    final box = _paintKey.currentContext?.findRenderObject() as RenderBox?;
+    final size = box?.size ?? const Size(520, 200);
+    final bytes = await _renderSignature(size);
+    if (!mounted) return;
+    Navigator.of(context).pop(bytes);
+  }
+
+  Future<Uint8List> _renderSignature(Size sourceSize) async {
+    const targetSize = Size(1040, 400);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(
+      targetSize.width / sourceSize.width,
+      targetSize.height / sourceSize.height,
+    );
+    _SignaturePainter(strokes: _strokes).paint(canvas, sourceSize);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      targetSize.width.round(),
+      targetSize.height.round(),
+    );
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    return data!.buffer.asUint8List();
+  }
+}
+
+class _SignaturePainter extends CustomPainter {
+  const _SignaturePainter({required this.strokes});
+
+  final List<List<Offset>> strokes;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.graphite
+      ..strokeWidth = 3.4
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    for (final stroke in strokes) {
+      if (stroke.length < 2) continue;
+      final path = Path()..moveTo(stroke.first.dx, stroke.first.dy);
+      for (final point in stroke.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) => true;
 }
 
 class _SettingsFeatureSheet extends StatelessWidget {
@@ -1715,60 +2348,6 @@ class _AnalyticsTile extends StatelessWidget {
   }
 }
 
-class _PdfStylePreset {
-  const _PdfStylePreset({
-    required this.title,
-    required this.subtitle,
-    required this.template,
-    required this.accentColor,
-    required this.icon,
-  });
-
-  final String title;
-  final String subtitle;
-  final String template;
-  final String accentColor;
-  final IconData icon;
-}
-
-const _pdfStylePresets = [
-  _PdfStylePreset(
-    title: 'Фирменный',
-    subtitle: 'оранжевая шапка',
-    template: PdfTemplate.accent,
-    accentColor: PdfAccentColor.orange,
-    icon: Icons.bolt_outlined,
-  ),
-  _PdfStylePreset(
-    title: 'Строгий КП',
-    subtitle: 'графит и белый лист',
-    template: PdfTemplate.classic,
-    accentColor: PdfAccentColor.graphite,
-    icon: Icons.article_outlined,
-  ),
-  _PdfStylePreset(
-    title: 'Доверие',
-    subtitle: 'зелёный акцент',
-    template: PdfTemplate.accent,
-    accentColor: PdfAccentColor.green,
-    icon: Icons.verified_outlined,
-  ),
-  _PdfStylePreset(
-    title: 'Технический',
-    subtitle: 'синий деловой стиль',
-    template: PdfTemplate.classic,
-    accentColor: PdfAccentColor.blue,
-    icon: Icons.engineering_outlined,
-  ),
-  _PdfStylePreset(
-    title: 'Компактный',
-    subtitle: 'больше работ на странице',
-    template: PdfTemplate.compact,
-    accentColor: PdfAccentColor.orange,
-    icon: Icons.view_agenda_outlined,
-  ),
-];
-
 class _PdfSettingsLauncherCard extends StatelessWidget {
   const _PdfSettingsLauncherCard({
     required this.profile,
@@ -1787,6 +2366,7 @@ class _PdfSettingsLauncherCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPro = profile?.hasActivePro == true;
+    final config = SmetaTemplates.byId(template);
     return SmetchikCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1818,7 +2398,7 @@ class _PdfSettingsLauncherCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        PdfTemplate.label(template),
+                        config.shortName,
                         style: const TextStyle(fontWeight: FontWeight.w900),
                       ),
                       Text(
@@ -1924,19 +2504,14 @@ class _PdfSettingsCard extends StatelessWidget {
                     selectedTemplate: template,
                     selectedAccentColor: accentColor,
                     enabled: hasPro && !busy,
-                    onSelected: (preset) {
-                      onTemplateChanged(preset.template);
-                      onAccentColorChanged(preset.accentColor);
+                    onSelected: (config) {
+                      onTemplateChanged(config.id);
+                      onAccentColorChanged(config.colors.accent);
                     },
                   ),
                   const SizedBox(height: 12),
-                  _PdfTemplatePicker(
-                    selected: template,
-                    enabled: hasPro && !busy,
-                    onChanged: onTemplateChanged,
-                  ),
-                  const SizedBox(height: 12),
                   _PdfColorPicker(
+                    template: template,
                     selected: accentColor,
                     enabled: hasPro && !busy,
                     onChanged: onAccentColorChanged,
@@ -1948,9 +2523,9 @@ class _PdfSettingsCard extends StatelessWidget {
                 builder: (context, _) => _PdfPreviewMock(
                   template: hasPro ? template : PdfTemplate.classic,
                   accentColor: hasPro ? accentColor : PdfAccentColor.orange,
-                  showBrandHeader: !hasPro || showBrandHeader,
+                  showBrandHeader: !hasPro,
                   showSignatures: !hasPro || showSignatures,
-                  showServiceMark: !hasPro || showServiceMark,
+                  showServiceMark: !hasPro,
                   paymentTerms: hasPro ? paymentTerms.text : '',
                   footerNote: hasPro ? footerNote.text : '',
                 ),
@@ -1975,10 +2550,10 @@ class _PdfSettingsCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _PdfSwitch(
-            title: 'Брендовая шапка Сметчика',
-            subtitle: 'Если выключить в Pro, в шапке будет имя мастера',
-            value: showBrandHeader,
-            enabled: hasPro && !busy,
+            title: 'Бренд мастера в PDF',
+            subtitle: 'В Pro в шапке используется имя и логотип мастера',
+            value: hasPro ? true : showBrandHeader,
+            enabled: false,
             onChanged: onShowBrandHeaderChanged,
           ),
           _PdfSwitch(
@@ -1990,9 +2565,9 @@ class _PdfSettingsCard extends StatelessWidget {
           ),
           _PdfSwitch(
             title: 'Отметка «Создано в Сметчике»',
-            subtitle: 'В Pro её можно скрыть',
-            value: showServiceMark,
-            enabled: hasPro && !busy,
+            subtitle: 'В Базовом показывается всегда, в Pro убирается',
+            value: !hasPro && showServiceMark,
+            enabled: false,
             onChanged: onShowServiceMarkChanged,
           ),
           const SizedBox(height: 10),
@@ -2057,7 +2632,7 @@ class _PdfPresetPicker extends StatelessWidget {
   final String selectedTemplate;
   final String selectedAccentColor;
   final bool enabled;
-  final ValueChanged<_PdfStylePreset> onSelected;
+  final ValueChanged<SmetaTemplateConfig> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -2070,13 +2645,13 @@ class _PdfPresetPicker extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final preset in _pdfStylePresets)
+            for (final preset in SmetaTemplates.premiumValues)
               _PdfPresetChip(
                 preset: preset,
                 selected:
-                    PdfTemplate.normalize(preset.template) ==
+                    PdfTemplate.normalize(preset.id) ==
                         PdfTemplate.normalize(selectedTemplate) &&
-                    PdfAccentColor.normalize(preset.accentColor) ==
+                    PdfAccentColor.normalize(preset.colors.accent) ==
                         PdfAccentColor.normalize(selectedAccentColor),
                 enabled: enabled,
                 onTap: () => onSelected(preset),
@@ -2096,14 +2671,14 @@ class _PdfPresetChip extends StatelessWidget {
     required this.onTap,
   });
 
-  final _PdfStylePreset preset;
+  final SmetaTemplateConfig preset;
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final accent = _colorFromHex(preset.accentColor);
+    final accent = _colorFromHex(preset.colors.accent);
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: enabled ? onTap : null,
@@ -2143,13 +2718,13 @@ class _PdfPresetChip extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              preset.title,
+              preset.shortName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontWeight: FontWeight.w900),
             ),
             Text(
-              preset.subtitle,
+              preset.description,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -2165,127 +2740,15 @@ class _PdfPresetChip extends StatelessWidget {
   }
 }
 
-class _PdfTemplatePicker extends StatelessWidget {
-  const _PdfTemplatePicker({
-    required this.selected,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final String selected;
-  final bool enabled;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final normalized = PdfTemplate.normalize(selected);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _FieldCaption('Стиль документа'),
-        const SizedBox(height: 8),
-        for (final template in PdfTemplate.values) ...[
-          _PdfTemplateOption(
-            template: template,
-            selected: PdfTemplate.normalize(template) == normalized,
-            enabled: enabled,
-            onTap: () => onChanged(template),
-          ),
-          if (template != PdfTemplate.values.last) const SizedBox(height: 8),
-        ],
-      ],
-    );
-  }
-}
-
-class _PdfTemplateOption extends StatelessWidget {
-  const _PdfTemplateOption({
+class _PdfColorPicker extends StatelessWidget {
+  const _PdfColorPicker({
     required this.template,
     required this.selected,
     required this.enabled,
-    required this.onTap,
-  });
-
-  final String template;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final icon = switch (PdfTemplate.normalize(template)) {
-      PdfTemplate.classic => Icons.article_outlined,
-      PdfTemplate.compact => Icons.view_agenda_outlined,
-      _ => Icons.auto_awesome_outlined,
-    };
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(16),
-      onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.orangeLight : AppColors.background,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? AppColors.orange : AppColors.border,
-            width: selected ? 1.4 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: selected ? AppColors.orange : AppColors.card,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: selected ? Colors.white : AppColors.orangeDark,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    PdfTemplate.label(template),
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  ),
-                  Text(
-                    PdfTemplate.caption(template),
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              selected ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: selected ? AppColors.orange : AppColors.textHint,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PdfColorPicker extends StatelessWidget {
-  const _PdfColorPicker({
-    required this.selected,
-    required this.enabled,
     required this.onChanged,
   });
 
+  final String template;
   final String selected;
   final bool enabled;
   final ValueChanged<String> onChanged;
@@ -2293,6 +2756,7 @@ class _PdfColorPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final normalized = PdfAccentColor.normalize(selected);
+    final colors = SmetaTemplates.accentChoicesFor(template);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2302,7 +2766,7 @@ class _PdfColorPicker extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            for (final color in PdfAccentColor.values)
+            for (final color in colors)
               _PdfColorDot(
                 value: color,
                 selected: PdfAccentColor.normalize(color) == normalized,
@@ -2398,13 +2862,34 @@ class _PdfPreviewMock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final normalizedTemplate = PdfTemplate.normalize(template);
+    final config = SmetaTemplates.byId(template);
     final accent = _colorFromHex(accentColor);
-    final compact = normalizedTemplate == PdfTemplate.compact;
-    final accentHeader = normalizedTemplate == PdfTemplate.accent;
-    final titleColor = accentHeader ? Colors.white : accent;
-    final headerTextColor = accentHeader ? Colors.white : AppColors.graphite;
-    final headerBg = accentHeader ? accent : AppColors.card;
+    final background = _colorFromHex(config.colors.background);
+    final surface = _colorFromHex(config.colors.surface);
+    final primaryText = _colorFromHex(config.colors.primaryText);
+    final secondaryText = _colorFromHex(config.colors.secondaryText);
+    final border = _colorFromHex(config.colors.border);
+    final compact =
+        config.id == PdfTemplate.storyFormat ||
+        config.layout.tableStyle == 'compact';
+    final totalTop = config.layout.totalsPosition == 'top';
+    final boxedRows = config.layout.tableStyle == 'boxed';
+    final gridRows =
+        config.layout.tableStyle == 'grid' ||
+        config.layout.tableStyle == 'detailed';
+    final radius = switch (config.layout.cornerStyle) {
+      'sharp' => 2.0,
+      'pill' => 20.0,
+      _ => 14.0,
+    };
+    final headerCentered = config.layout.headerAlign == 'center';
+    final dark =
+        ThemeData.estimateBrightnessForColor(background) == Brightness.dark;
+    final headerBg = config.layout.dividerStyle == 'none' ? surface : accent;
+    final headerTextColor =
+        ThemeData.estimateBrightnessForColor(headerBg) == Brightness.dark
+        ? Colors.white
+        : primaryText;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -2422,9 +2907,9 @@ class _PdfPreviewMock extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: 320),
             padding: EdgeInsets.all(compact ? 12 : 16),
             decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
+              color: background,
+              borderRadius: BorderRadius.circular(radius + 4),
+              border: Border.all(color: border),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.04),
@@ -2434,44 +2919,50 @@ class _PdfPreviewMock extends StatelessWidget {
               ],
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: headerCentered
+                  ? CrossAxisAlignment.center
+                  : CrossAxisAlignment.start,
               children: [
+                if (config.features.showCoverPage) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(radius),
+                    ),
+                    child: Text(
+                      'Обложка КП · Алексей · 10.07',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   padding: EdgeInsets.all(compact ? 10 : 14),
                   decoration: BoxDecoration(
                     color: headerBg,
-                    borderRadius: BorderRadius.circular(14),
-                    border: accentHeader
-                        ? null
-                        : Border.all(color: accent.withValues(alpha: 0.22)),
+                    borderRadius: BorderRadius.circular(radius),
+                    border: Border.all(color: border),
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                          color: accentHeader
-                              ? Colors.white.withValues(alpha: 0.16)
-                              : accent.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Icon(
-                          Icons.receipt_long_outlined,
-                          color: titleColor,
-                          size: 19,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                  child: headerCentered
+                      ? Column(
                           children: [
+                            _PreviewLogo(
+                              accent: accent,
+                              foreground: headerTextColor,
+                              showBrandHeader: showBrandHeader,
+                            ),
+                            const SizedBox(height: 8),
                             Text(
-                              showBrandHeader ? 'Сметчик' : 'Илья',
+                              config.shortName,
                               style: TextStyle(
-                                color: titleColor,
+                                color: headerTextColor,
                                 fontWeight: FontWeight.w900,
                                 fontSize: compact ? 14 : 16,
                               ),
@@ -2479,45 +2970,98 @@ class _PdfPreviewMock extends StatelessWidget {
                             Text(
                               'Коммерческое предложение',
                               style: TextStyle(
-                                color: headerTextColor.withValues(
-                                  alpha: accentHeader ? 0.72 : 0.58,
-                                ),
+                                color: headerTextColor.withValues(alpha: 0.68),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
+                        )
+                      : Row(
+                          children: [
+                            _PreviewLogo(
+                              accent: accent,
+                              foreground: headerTextColor,
+                              showBrandHeader: showBrandHeader,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    showBrandHeader ? 'Сметчик' : 'Илья',
+                                    style: TextStyle(
+                                      color: headerTextColor,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: compact ? 14 : 16,
+                                    ),
+                                  ),
+                                  Text(
+                                    config.shortName,
+                                    style: TextStyle(
+                                      color: headerTextColor.withValues(
+                                        alpha: 0.68,
+                                      ),
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '10.07',
+                              style: TextStyle(
+                                color: headerTextColor.withValues(alpha: 0.68),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      Text(
-                        '10.07',
-                        style: TextStyle(
-                          color: headerTextColor.withValues(
-                            alpha: accentHeader ? 0.72 : 0.58,
-                          ),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
                 SizedBox(height: compact ? 10 : 14),
                 Text(
                   'Ремонт ванной',
+                  textAlign: headerCentered ? TextAlign.center : TextAlign.left,
                   style: TextStyle(
                     fontSize: compact ? 17 : 20,
                     fontWeight: FontWeight.w900,
-                    color: AppColors.graphite,
+                    color: primaryText,
                   ),
                 ),
                 const SizedBox(height: 6),
+                if (totalTop) ...[
+                  _PdfPreviewTotal(
+                    accent: accent,
+                    radius: radius,
+                    dark: dark,
+                    amount: '13 200 ₽',
+                  ),
+                  SizedBox(height: compact ? 10 : 14),
+                ],
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: const [
-                    _PdfPreviewPill(label: 'Клиент', value: 'Алексей'),
-                    _PdfPreviewPill(label: 'Срок', value: '14 дней'),
+                  alignment: headerCentered
+                      ? WrapAlignment.center
+                      : WrapAlignment.start,
+                  children: [
+                    _PdfPreviewPill(
+                      label: 'Клиент',
+                      value: 'Алексей',
+                      surface: surface,
+                      border: border,
+                      textColor: primaryText,
+                    ),
+                    _PdfPreviewPill(
+                      label: 'Срок',
+                      value: '14 дней',
+                      surface: surface,
+                      border: border,
+                      textColor: primaryText,
+                    ),
                   ],
                 ),
                 SizedBox(height: compact ? 10 : 14),
@@ -2528,6 +3072,13 @@ class _PdfPreviewMock extends StatelessWidget {
                   amount: '9 000 ₽',
                   accent: accent,
                   compact: compact,
+                  boxed: boxedRows,
+                  grid: gridRows,
+                  surface: surface,
+                  border: border,
+                  primaryText: primaryText,
+                  secondaryText: secondaryText,
+                  radius: radius,
                 ),
                 _PdfPreviewLine(
                   index: 2,
@@ -2536,6 +3087,13 @@ class _PdfPreviewMock extends StatelessWidget {
                   amount: '2 400 ₽',
                   accent: accent,
                   compact: compact,
+                  boxed: boxedRows,
+                  grid: gridRows,
+                  surface: surface,
+                  border: border,
+                  primaryText: primaryText,
+                  secondaryText: secondaryText,
+                  radius: radius,
                 ),
                 _PdfPreviewLine(
                   index: 3,
@@ -2544,44 +3102,30 @@ class _PdfPreviewMock extends StatelessWidget {
                   amount: '1 800 ₽',
                   accent: accent,
                   compact: compact,
+                  boxed: boxedRows,
+                  grid: gridRows,
+                  surface: surface,
+                  border: border,
+                  primaryText: primaryText,
+                  secondaryText: secondaryText,
+                  radius: radius,
                 ),
-                SizedBox(height: compact ? 10 : 14),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
+                if (!totalTop) ...[
+                  SizedBox(height: compact ? 10 : 14),
+                  _PdfPreviewTotal(
+                    accent: accent,
+                    radius: radius,
+                    dark: dark,
+                    amount: '13 200 ₽',
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.graphite,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Итого',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        '13 200 ₽',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                ],
                 if (paymentTerms.trim().isNotEmpty) ...[
                   const SizedBox(height: 10),
                   _PdfPreviewNote(
                     title: 'Оплата',
                     text: paymentTerms.trim(),
                     accent: accent,
+                    textColor: primaryText,
                   ),
                 ],
                 if (footerNote.trim().isNotEmpty) ...[
@@ -2590,16 +3134,53 @@ class _PdfPreviewMock extends StatelessWidget {
                     title: 'Примечание',
                     text: footerNote.trim(),
                     accent: accent,
+                    textColor: primaryText,
                   ),
                 ],
                 if (showSignatures) ...[
                   const SizedBox(height: 14),
                   Row(
-                    children: const [
-                      Expanded(child: _PdfSignatureLine(label: 'Исполнитель')),
-                      SizedBox(width: 10),
-                      Expanded(child: _PdfSignatureLine(label: 'Заказчик')),
+                    children: [
+                      Expanded(
+                        child: _PdfSignatureLine(
+                          label: 'Исполнитель',
+                          textColor: primaryText,
+                          border: border,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _PdfSignatureLine(
+                          label: 'Заказчик',
+                          textColor: primaryText,
+                          border: border,
+                        ),
+                      ),
                     ],
+                  ),
+                ],
+                if (config.features.showStampArea) ...[
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      width: 84,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: accent, width: 1.2),
+                        borderRadius: BorderRadius.circular(radius),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'место печати',
+                          style: TextStyle(
+                            color: accent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
                 if (showServiceMark) ...[
@@ -2608,8 +3189,21 @@ class _PdfPreviewMock extends StatelessWidget {
                     child: Text(
                       'Создано в Сметчике',
                       style: TextStyle(
-                        color: AppColors.textHint.withValues(alpha: 0.72),
+                        color: secondaryText.withValues(alpha: 0.72),
                         fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+                if (config.features.showWatermark) ...[
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'водяной знак: ${config.features.watermarkText}',
+                      style: TextStyle(
+                        color: secondaryText.withValues(alpha: 0.52),
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -2642,24 +3236,121 @@ class _FieldCaption extends StatelessWidget {
   }
 }
 
+class _PreviewLogo extends StatelessWidget {
+  const _PreviewLogo({
+    required this.accent,
+    required this.foreground,
+    required this.showBrandHeader,
+  });
+
+  final Color accent;
+  final Color foreground;
+  final bool showBrandHeader;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: foreground.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Icon(
+        showBrandHeader ? Icons.receipt_long_outlined : Icons.person_outline,
+        color: foreground,
+        size: 19,
+      ),
+    );
+  }
+}
+
+class _PdfPreviewTotal extends StatelessWidget {
+  const _PdfPreviewTotal({
+    required this.accent,
+    required this.radius,
+    required this.dark,
+    required this.amount,
+  });
+
+  final Color accent;
+  final double radius;
+  final bool dark;
+  final String amount;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground =
+        ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
+        ? Colors.white
+        : AppColors.graphite;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: accent,
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: dark
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 12,
+                  offset: const Offset(0, 6),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Итого',
+            style: TextStyle(
+              color: foreground.withValues(alpha: 0.74),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            amount,
+            style: TextStyle(color: foreground, fontWeight: FontWeight.w900),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PdfPreviewPill extends StatelessWidget {
-  const _PdfPreviewPill({required this.label, required this.value});
+  const _PdfPreviewPill({
+    required this.label,
+    required this.value,
+    required this.surface,
+    required this.border,
+    required this.textColor,
+  });
 
   final String label;
   final String value;
+  final Color surface;
+  final Color border;
+  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: surface,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: border),
       ),
       child: Text(
         '$label: $value',
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+        style: TextStyle(
+          color: textColor,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }
@@ -2673,6 +3364,13 @@ class _PdfPreviewLine extends StatelessWidget {
     required this.amount,
     required this.accent,
     required this.compact,
+    required this.boxed,
+    required this.grid,
+    required this.surface,
+    required this.border,
+    required this.primaryText,
+    required this.secondaryText,
+    required this.radius,
   });
 
   final int index;
@@ -2681,65 +3379,87 @@ class _PdfPreviewLine extends StatelessWidget {
   final String amount;
   final Color accent;
   final bool compact;
+  final bool boxed;
+  final bool grid;
+  final Color surface;
+  final Color border;
+  final Color primaryText;
+  final Color secondaryText;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: compact ? 6 : 8),
-      child: Row(
-        children: [
-          Container(
-            width: 25,
-            height: 25,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Text(
-                '$index',
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                ),
+    final row = Row(
+      children: [
+        Container(
+          width: 25,
+          height: 25,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(radius > 8 ? 8 : radius),
+          ),
+          child: Center(
+            child: Text(
+              '$index',
+              style: TextStyle(
+                color: accent,
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: primaryText,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
                 ),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textHint,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                  ),
+              ),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: secondaryText,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            amount,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          amount,
+          style: TextStyle(
+            color: primaryText,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+
+    return Container(
+      margin: EdgeInsets.only(bottom: compact ? 6 : 8),
+      padding: boxed || grid ? const EdgeInsets.all(8) : EdgeInsets.zero,
+      decoration: boxed || grid
+          ? BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(radius),
+              border: Border.all(color: border),
+            )
+          : null,
+      child: row,
     );
   }
 }
@@ -2749,11 +3469,13 @@ class _PdfPreviewNote extends StatelessWidget {
     required this.title,
     required this.text,
     required this.accent,
+    required this.textColor,
   });
 
   final String title;
   final String text;
   final Color accent;
+  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -2780,7 +3502,11 @@ class _PdfPreviewNote extends StatelessWidget {
             text,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            style: TextStyle(
+              color: textColor,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -2789,21 +3515,27 @@ class _PdfPreviewNote extends StatelessWidget {
 }
 
 class _PdfSignatureLine extends StatelessWidget {
-  const _PdfSignatureLine({required this.label});
+  const _PdfSignatureLine({
+    required this.label,
+    required this.textColor,
+    required this.border,
+  });
 
   final String label;
+  final Color textColor;
+  final Color border;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(height: 1, color: AppColors.border),
+        Container(height: 1, color: border),
         const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(
-            color: AppColors.textHint,
+          style: TextStyle(
+            color: textColor.withValues(alpha: 0.62),
             fontSize: 10,
             fontWeight: FontWeight.w700,
           ),

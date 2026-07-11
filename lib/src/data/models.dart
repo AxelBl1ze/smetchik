@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import 'pdf_templates.dart';
+
 final rubFormatter = NumberFormat.currency(
   locale: 'ru_RU',
   symbol: '₽',
@@ -32,6 +34,9 @@ String formatMoney(num value) => rubFormatter.format(value);
 
 String formatDate(DateTime date) =>
     DateFormat('dd.MM.yyyy', 'ru_RU').format(date);
+
+String formatDateTime(DateTime date) =>
+    DateFormat('dd.MM.yyyy HH:mm', 'ru_RU').format(date.toLocal());
 
 String formatQuantity(num value) {
   final asDouble = value.toDouble();
@@ -184,34 +189,35 @@ class SubscriptionSource {
 class PdfTemplate {
   const PdfTemplate._();
 
+  static const standardFree = 'standard_free';
+  static const goldNoir = 'premium_gold_noir';
+  static const whiteSpace = 'premium_white_space';
+  static const brightAccent = 'premium_bright_accent';
+  static const corporateClassic = 'premium_corporate_classic';
+  static const invoiceFirst = 'premium_invoice_first';
+  static const craftPaper = 'premium_craft_paper';
+  static const techGrid = 'premium_tech_grid';
+  static const coverDeluxe = 'premium_cover_deluxe';
+  static const storyFormat = 'premium_story_format';
+  static const bilingual = 'premium_bilingual';
+  static const signedSealed = 'premium_signed_sealed';
+
   static const classic = 'classic';
   static const accent = 'accent';
   static const compact = 'compact';
 
-  static const values = [classic, accent, compact];
+  static final values = SmetaTemplates.ids;
 
   static String normalize(String? value) {
-    return switch ((value ?? '').trim()) {
-      classic => classic,
-      compact => compact,
-      _ => accent,
-    };
+    return SmetaTemplates.normalizeId(value);
   }
 
   static String label(String value) {
-    return switch (normalize(value)) {
-      classic => 'Классика',
-      compact => 'Компактный',
-      _ => 'Акцентный',
-    };
+    return SmetaTemplates.byId(value).shortName;
   }
 
   static String caption(String value) {
-    return switch (normalize(value)) {
-      classic => 'строгий КП-вид',
-      compact => 'больше строк на странице',
-      _ => 'современная шапка',
-    };
+    return SmetaTemplates.byId(value).description;
   }
 }
 
@@ -223,11 +229,29 @@ class PdfAccentColor {
   static const green = '#3B6D11';
   static const blue = '#185FA5';
 
-  static const values = [orange, graphite, green, blue];
+  static const values = [
+    orange,
+    graphite,
+    green,
+    blue,
+    '#2F6FE0',
+    '#C9A24A',
+    '#3C3A35',
+    '#378ADD',
+    '#639922',
+    '#D85A30',
+    '#D4537E',
+    '#B0512E',
+    '#0F6E56',
+    '#3C3489',
+    '#085041',
+    '#5F5E5A',
+  ];
 
   static String normalize(String? value) {
     final normalized = (value ?? '').trim().toUpperCase();
-    return values.contains(normalized) ? normalized : orange;
+    final validHex = RegExp(r'^#[0-9A-F]{6}$').hasMatch(normalized);
+    return validHex ? normalized : orange;
   }
 
   static String label(String value) {
@@ -235,6 +259,18 @@ class PdfAccentColor {
       graphite => 'Графит',
       green => 'Зелёный',
       blue => 'Синий',
+      '#2F6FE0' => 'Синий',
+      '#C9A24A' => 'Золото',
+      '#3C3A35' => 'Тёплый графит',
+      '#378ADD' => 'Ярко-синий',
+      '#639922' => 'Травяной',
+      '#D85A30' => 'Коралл',
+      '#D4537E' => 'Розовый',
+      '#B0512E' => 'Терракота',
+      '#0F6E56' => 'Бирюзовый',
+      '#3C3489' => 'Фиолетовый',
+      '#085041' => 'Тёмно-зелёный',
+      '#5F5E5A' => 'Нейтральный',
       _ => 'Оранжевый',
     };
   }
@@ -247,6 +283,15 @@ class ProfileModel {
     this.phone,
     this.specialization,
     this.logoPath,
+    this.logoUrl,
+    this.signaturePath,
+    this.signatureUrl,
+    this.paymentQrPath,
+    this.paymentQrUrl,
+    this.paymentQrLabel,
+    this.contactQrPath,
+    this.contactQrUrl,
+    this.contactQrLabel,
     required this.currency,
     this.subscriptionPlan = SubscriptionPlan.basic,
     this.subscriptionStatus = 'active',
@@ -255,7 +300,7 @@ class ProfileModel {
     this.pdfShowBrandHeader = true,
     this.pdfShowSignatures = true,
     this.pdfShowServiceMark = true,
-    this.pdfTemplate = PdfTemplate.accent,
+    this.pdfTemplate = PdfTemplate.brightAccent,
     this.pdfAccentColor = PdfAccentColor.orange,
     this.pdfPaymentTerms,
     this.pdfFooterNote,
@@ -269,6 +314,15 @@ class ProfileModel {
   final String? phone;
   final String? specialization;
   final String? logoPath;
+  final String? logoUrl;
+  final String? signaturePath;
+  final String? signatureUrl;
+  final String? paymentQrPath;
+  final String? paymentQrUrl;
+  final String? paymentQrLabel;
+  final String? contactQrPath;
+  final String? contactQrUrl;
+  final String? contactQrLabel;
   final String currency;
   final String subscriptionPlan;
   final String subscriptionStatus;
@@ -338,6 +392,15 @@ class ProfileModel {
       phone: map['phone'] as String?,
       specialization: map['specialization'] as String?,
       logoPath: map['logo_path'] as String?,
+      logoUrl: map['logo_url'] as String?,
+      signaturePath: map['signature_path'] as String?,
+      signatureUrl: map['signature_url'] as String?,
+      paymentQrPath: map['payment_qr_path'] as String?,
+      paymentQrUrl: map['payment_qr_url'] as String?,
+      paymentQrLabel: map['payment_qr_label'] as String?,
+      contactQrPath: map['contact_qr_path'] as String?,
+      contactQrUrl: map['contact_qr_url'] as String?,
+      contactQrLabel: map['contact_qr_label'] as String?,
       currency: (map['currency'] as String?) ?? 'RUB',
       subscriptionPlan: SubscriptionPlan.normalize(
         map['subscription_plan'] as String?,
@@ -358,6 +421,64 @@ class ProfileModel {
       ),
       pdfPaymentTerms: map['pdf_payment_terms'] as String?,
       pdfFooterNote: map['pdf_footer_note'] as String?,
+    );
+  }
+
+  ProfileModel copyWith({
+    String? id,
+    String? fullName,
+    String? phone,
+    String? specialization,
+    String? logoPath,
+    String? logoUrl,
+    String? signaturePath,
+    String? signatureUrl,
+    String? paymentQrPath,
+    String? paymentQrUrl,
+    String? paymentQrLabel,
+    String? contactQrPath,
+    String? contactQrUrl,
+    String? contactQrLabel,
+    String? currency,
+    String? subscriptionPlan,
+    String? subscriptionStatus,
+    String? subscriptionSource,
+    DateTime? subscriptionRenewsAt,
+    bool? pdfShowBrandHeader,
+    bool? pdfShowSignatures,
+    bool? pdfShowServiceMark,
+    String? pdfTemplate,
+    String? pdfAccentColor,
+    String? pdfPaymentTerms,
+    String? pdfFooterNote,
+  }) {
+    return ProfileModel(
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      phone: phone ?? this.phone,
+      specialization: specialization ?? this.specialization,
+      logoPath: logoPath ?? this.logoPath,
+      logoUrl: logoUrl ?? this.logoUrl,
+      signaturePath: signaturePath ?? this.signaturePath,
+      signatureUrl: signatureUrl ?? this.signatureUrl,
+      paymentQrPath: paymentQrPath ?? this.paymentQrPath,
+      paymentQrUrl: paymentQrUrl ?? this.paymentQrUrl,
+      paymentQrLabel: paymentQrLabel ?? this.paymentQrLabel,
+      contactQrPath: contactQrPath ?? this.contactQrPath,
+      contactQrUrl: contactQrUrl ?? this.contactQrUrl,
+      contactQrLabel: contactQrLabel ?? this.contactQrLabel,
+      currency: currency ?? this.currency,
+      subscriptionPlan: subscriptionPlan ?? this.subscriptionPlan,
+      subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+      subscriptionSource: subscriptionSource ?? this.subscriptionSource,
+      subscriptionRenewsAt: subscriptionRenewsAt ?? this.subscriptionRenewsAt,
+      pdfShowBrandHeader: pdfShowBrandHeader ?? this.pdfShowBrandHeader,
+      pdfShowSignatures: pdfShowSignatures ?? this.pdfShowSignatures,
+      pdfShowServiceMark: pdfShowServiceMark ?? this.pdfShowServiceMark,
+      pdfTemplate: pdfTemplate ?? this.pdfTemplate,
+      pdfAccentColor: pdfAccentColor ?? this.pdfAccentColor,
+      pdfPaymentTerms: pdfPaymentTerms ?? this.pdfPaymentTerms,
+      pdfFooterNote: pdfFooterNote ?? this.pdfFooterNote,
     );
   }
 }
@@ -451,7 +572,18 @@ class EstimateModel {
     this.durationDays,
     required this.status,
     required this.totalAmount,
+    this.documentVersion = 1,
+    this.revisionOf,
     this.pdfStoragePath,
+    this.signedPdfStoragePath,
+    this.clientSignaturePath,
+    this.clientSignatureUrl,
+    this.clientSignedAt,
+    this.clientSignedName,
+    this.clientSignedPhone,
+    this.clientSignatureOtpChallengeId,
+    this.clientPhoneVerifiedAt,
+    this.clientSignatureStatementVersion,
     required this.createdAt,
   });
 
@@ -463,8 +595,21 @@ class EstimateModel {
   final int? durationDays;
   final String status;
   final double totalAmount;
+  final int documentVersion;
+  final String? revisionOf;
   final String? pdfStoragePath;
+  final String? signedPdfStoragePath;
+  final String? clientSignaturePath;
+  final String? clientSignatureUrl;
+  final DateTime? clientSignedAt;
+  final String? clientSignedName;
+  final String? clientSignedPhone;
+  final String? clientSignatureOtpChallengeId;
+  final DateTime? clientPhoneVerifiedAt;
+  final String? clientSignatureStatementVersion;
   final DateTime createdAt;
+
+  bool get isLocked => clientSignedAt != null;
 
   factory EstimateModel.fromMap(Map<String, dynamic> map) {
     final clientMap = map['clients'];
@@ -479,8 +624,73 @@ class EstimateModel {
       durationDays: asIntOrNull(map['duration_days']),
       status: EstimateStatus.normalize(map['status'] as String?),
       totalAmount: asDouble(map['total_amount']),
+      documentVersion: asIntOrNull(map['document_version']) ?? 1,
+      revisionOf: map['revision_of'] as String?,
       pdfStoragePath: map['pdf_storage_path'] as String?,
+      signedPdfStoragePath: map['signed_pdf_storage_path'] as String?,
+      clientSignaturePath: map['client_signature_path'] as String?,
+      clientSignatureUrl: map['client_signature_url'] as String?,
+      clientSignedAt: asDateOrNull(map['client_signed_at']),
+      clientSignedName: map['client_signed_name'] as String?,
+      clientSignedPhone: map['client_signed_phone'] as String?,
+      clientSignatureOtpChallengeId:
+          map['client_signature_otp_challenge_id'] as String?,
+      clientPhoneVerifiedAt: asDateOrNull(map['client_phone_verified_at']),
+      clientSignatureStatementVersion:
+          map['client_signature_statement_version'] as String?,
       createdAt: asDate(map['created_at']),
+    );
+  }
+
+  EstimateModel copyWith({
+    String? id,
+    String? clientId,
+    ClientModel? client,
+    String? objectTitle,
+    DateTime? estimateDate,
+    int? durationDays,
+    String? status,
+    double? totalAmount,
+    int? documentVersion,
+    String? revisionOf,
+    String? pdfStoragePath,
+    String? signedPdfStoragePath,
+    String? clientSignaturePath,
+    String? clientSignatureUrl,
+    DateTime? clientSignedAt,
+    String? clientSignedName,
+    String? clientSignedPhone,
+    String? clientSignatureOtpChallengeId,
+    DateTime? clientPhoneVerifiedAt,
+    String? clientSignatureStatementVersion,
+    DateTime? createdAt,
+  }) {
+    return EstimateModel(
+      id: id ?? this.id,
+      clientId: clientId ?? this.clientId,
+      client: client ?? this.client,
+      objectTitle: objectTitle ?? this.objectTitle,
+      estimateDate: estimateDate ?? this.estimateDate,
+      durationDays: durationDays ?? this.durationDays,
+      status: status ?? this.status,
+      totalAmount: totalAmount ?? this.totalAmount,
+      documentVersion: documentVersion ?? this.documentVersion,
+      revisionOf: revisionOf ?? this.revisionOf,
+      pdfStoragePath: pdfStoragePath ?? this.pdfStoragePath,
+      signedPdfStoragePath: signedPdfStoragePath ?? this.signedPdfStoragePath,
+      clientSignaturePath: clientSignaturePath ?? this.clientSignaturePath,
+      clientSignatureUrl: clientSignatureUrl ?? this.clientSignatureUrl,
+      clientSignedAt: clientSignedAt ?? this.clientSignedAt,
+      clientSignedName: clientSignedName ?? this.clientSignedName,
+      clientSignedPhone: clientSignedPhone ?? this.clientSignedPhone,
+      clientSignatureOtpChallengeId:
+          clientSignatureOtpChallengeId ?? this.clientSignatureOtpChallengeId,
+      clientPhoneVerifiedAt:
+          clientPhoneVerifiedAt ?? this.clientPhoneVerifiedAt,
+      clientSignatureStatementVersion:
+          clientSignatureStatementVersion ??
+          this.clientSignatureStatementVersion,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }
@@ -561,6 +771,20 @@ class EstimateDetail {
 
   final EstimateModel estimate;
   final List<EstimateLineModel> lines;
+}
+
+class EstimateSignatureOtpChallenge {
+  const EstimateSignatureOtpChallenge({
+    required this.id,
+    required this.maskedPhone,
+    this.expiresAt,
+    this.verifiedAt,
+  });
+
+  final String id;
+  final String maskedPhone;
+  final DateTime? expiresAt;
+  final DateTime? verifiedAt;
 }
 
 class EstimateDraft {

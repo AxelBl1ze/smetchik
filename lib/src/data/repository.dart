@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/app_config.dart';
 import 'models.dart';
+import 'signing.dart';
 
 final repositoryProvider = Provider<SmetchikRepository>((ref) {
   if (!AppConfig.hasSupabaseConfig) {
@@ -65,13 +66,21 @@ class SmetchikRepository {
         .eq('id', _userId)
         .maybeSingle();
     if (data == null) return null;
-    return ProfileModel.fromMap(data);
+    final profile = ProfileModel.fromMap(data);
+    return profile.copyWith(
+      logoUrl: logoPublicUrl(profile.logoPath),
+      signatureUrl: signaturePublicUrl(profile.signaturePath),
+      paymentQrUrl: qrPublicUrl(profile.paymentQrPath),
+      contactQrUrl: qrPublicUrl(profile.contactQrPath),
+    );
   }
 
   Future<void> saveProfile({
     required String fullName,
     String? phone,
     String? specialization,
+    String? paymentQrLabel,
+    String? contactQrLabel,
     String currency = 'RUB',
   }) async {
     await _client.from('profiles').upsert({
@@ -79,6 +88,8 @@ class SmetchikRepository {
       'full_name': fullName.trim(),
       'phone': _blankToNull(phone),
       'specialization': _blankToNull(specialization),
+      'payment_qr_label': _blankToNull(paymentQrLabel),
+      'contact_qr_label': _blankToNull(contactQrLabel),
       'currency': currency,
     });
   }
@@ -163,6 +174,24 @@ class SmetchikRepository {
     return _client.storage.from('logos').getPublicUrl(path);
   }
 
+  String? signaturePublicUrl(String? path) {
+    if (path == null || path.trim().isEmpty) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return _client.storage.from('signatures').getPublicUrl(path);
+  }
+
+  String? qrPublicUrl(String? path) {
+    if (path == null || path.trim().isEmpty) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return _client.storage.from('qr-codes').getPublicUrl(path);
+  }
+
+  String? clientSignaturePublicUrl(String? path) {
+    if (path == null || path.trim().isEmpty) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return _client.storage.from('client-signatures').getPublicUrl(path);
+  }
+
   Future<String> uploadProfileAvatar({
     required Uint8List bytes,
     required String contentType,
@@ -185,6 +214,53 @@ class SmetchikRepository {
         .from('profiles')
         .update({'logo_path': path})
         .eq('id', _userId);
+    return path;
+  }
+
+  Future<String> uploadProfileSignature({required Uint8List bytes}) async {
+    final version = DateTime.now().millisecondsSinceEpoch;
+    final path = '$_userId/signature-$version.png';
+    await _client.storage
+        .from('signatures')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+            upsert: true,
+            contentType: 'image/png',
+          ),
+        );
+    await _client
+        .from('profiles')
+        .update({'signature_path': path})
+        .eq('id', _userId);
+    return path;
+  }
+
+  Future<String> uploadProfileQr({
+    required String kind,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final normalizedKind = kind == 'contact' ? 'contact' : 'payment';
+    final extension = switch (contentType) {
+      'image/png' => 'png',
+      'image/webp' => 'webp',
+      _ => 'jpg',
+    };
+    final version = DateTime.now().millisecondsSinceEpoch;
+    final path = '$_userId/$normalizedKind-qr-$version.$extension';
+    final column = normalizedKind == 'contact'
+        ? 'contact_qr_path'
+        : 'payment_qr_path';
+    await _client.storage
+        .from('qr-codes')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(upsert: true, contentType: contentType),
+        );
+    await _client.from('profiles').update({column: path}).eq('id', _userId);
     return path;
   }
 
@@ -546,7 +622,14 @@ class SmetchikRepository {
         .select('*, clients(*)')
         .eq('user_id', _userId)
         .order('created_at', ascending: false);
-    return rows.map((row) => EstimateModel.fromMap(row)).toList();
+    return rows.map((row) {
+      final estimate = EstimateModel.fromMap(row);
+      return estimate.copyWith(
+        clientSignatureUrl: clientSignaturePublicUrl(
+          estimate.clientSignaturePath,
+        ),
+      );
+    }).toList();
   }
 
   Future<EstimateDetail> fetchEstimateDetail(String id) async {
@@ -562,8 +645,13 @@ class SmetchikRepository {
         .eq('estimate_id', id)
         .eq('user_id', _userId)
         .order('sort_order');
+    final estimate = EstimateModel.fromMap(estimateRow);
     return EstimateDetail(
-      estimate: EstimateModel.fromMap(estimateRow),
+      estimate: estimate.copyWith(
+        clientSignatureUrl: clientSignaturePublicUrl(
+          estimate.clientSignaturePath,
+        ),
+      ),
       lines: lineRows.map((row) => EstimateLineModel.fromMap(row)).toList(),
     );
   }
@@ -571,9 +659,13 @@ class SmetchikRepository {
   Future<String> saveEstimateDraft(
     EstimateDraft draft, {
     String? estimateId,
+    String? revisionOf,
+    int? documentVersion,
   }) async {
     if (estimateId == null) {
       await _ensureCanCreateEstimate();
+    } else {
+      await _ensureEstimateEditable(estimateId);
     }
 
     String? clientId = draft.clientId;
@@ -606,7 +698,11 @@ class SmetchikRepository {
     if (estimateId == null) {
       final row = await _client
           .from('estimates')
-          .insert(estimatePayload)
+          .insert({
+            ...estimatePayload,
+            'revision_of': revisionOf,
+            'document_version': documentVersion ?? 1,
+          })
           .select('id')
           .single();
       savedId = row['id'] as String;
@@ -644,6 +740,20 @@ class SmetchikRepository {
     return savedId;
   }
 
+  Future<void> _ensureEstimateEditable(String estimateId) async {
+    final row = await _client
+        .from('estimates')
+        .select('client_signed_at')
+        .eq('id', estimateId)
+        .eq('user_id', _userId)
+        .maybeSingle();
+    if (row?['client_signed_at'] != null) {
+      throw Exception(
+        'Смета уже подписана клиентом и не может быть изменена. Создайте новую версию.',
+      );
+    }
+  }
+
   Future<void> _ensureCanCreateEstimate() async {
     final profile = await fetchProfile();
     final limit =
@@ -677,6 +787,115 @@ class SmetchikRepository {
         .eq('user_id', _userId);
   }
 
+  Future<void> acceptEstimateWithClientSignature({
+    required String estimateId,
+    required Uint8List signatureBytes,
+    required Uint8List signedPdfBytes,
+    required Map<String, dynamic> signedSnapshot,
+    required DateTime signedAt,
+    required String clientName,
+    String? clientPhone,
+    required int documentVersion,
+    required String signatureChallengeId,
+  }) async {
+    final normalizedClientPhone = _normalizeRussianPhone(clientPhone);
+    final version = DateTime.now().millisecondsSinceEpoch;
+    final signaturePath =
+        '$_userId/$estimateId/v$documentVersion-$version-signature.png';
+    await _client.storage
+        .from('client-signatures')
+        .uploadBinary(
+          signaturePath,
+          signatureBytes,
+          fileOptions: const FileOptions(contentType: 'image/png'),
+        );
+    final signedPdfPath =
+        '$_userId/$estimateId/v$documentVersion-$version-signed.pdf';
+    await _client.storage
+        .from('signed-estimate-pdfs')
+        .uploadBinary(
+          signedPdfPath,
+          signedPdfBytes,
+          fileOptions: const FileOptions(contentType: 'application/pdf'),
+        );
+
+    final updated = await _client
+        .from('estimates')
+        .update({
+          'status': EstimateStatus.accepted,
+          'client_signature_path': signaturePath,
+          'client_signed_at': signedAt.toUtc().toIso8601String(),
+          'client_signed_name': clientName.trim(),
+          'client_signed_phone': normalizedClientPhone,
+          'client_signature_otp_challenge_id': signatureChallengeId,
+          'client_signature_statement_version': clientSignatureStatementVersion,
+          'client_signature_statement': clientSignatureStatement,
+          'signed_document_snapshot': signedSnapshot,
+          'signed_pdf_storage_path': signedPdfPath,
+        })
+        .eq('id', estimateId)
+        .eq('user_id', _userId)
+        .eq('status', EstimateStatus.sent)
+        .isFilter('client_signed_at', null)
+        .select('id')
+        .maybeSingle();
+    if (updated == null) {
+      throw Exception(
+        'Смета уже была подписана или её статус изменился. Обновите страницу и повторите попытку.',
+      );
+    }
+  }
+
+  Future<Uint8List> downloadSignedEstimatePdf(String path) {
+    return _client.storage.from('signed-estimate-pdfs').download(path);
+  }
+
+  Future<EstimateSignatureOtpChallenge> requestEstimateSignatureCode({
+    required String estimateId,
+  }) async {
+    final response = await _client.functions.invoke(
+      'estimate-signature-otp',
+      body: {'action': 'send', 'estimateId': estimateId},
+    );
+    final data = _functionData(response.data);
+    final id = data['challengeId'] as String?;
+    if (id == null || id.isEmpty) {
+      throw const AuthException('Сервис не вернул номер запроса кода.');
+    }
+    final seconds = asIntOrNull(data['expiresIn']);
+    return EstimateSignatureOtpChallenge(
+      id: id,
+      maskedPhone: (data['maskedPhone'] as String?) ?? 'номер клиента',
+      expiresAt: seconds == null
+          ? null
+          : DateTime.now().add(Duration(seconds: seconds)),
+    );
+  }
+
+  Future<EstimateSignatureOtpChallenge> verifyEstimateSignatureCode({
+    required String challengeId,
+    required String code,
+  }) async {
+    final response = await _client.functions.invoke(
+      'estimate-signature-otp',
+      body: {
+        'action': 'verify',
+        'challengeId': challengeId,
+        'code': code.trim(),
+      },
+    );
+    final data = _functionData(response.data);
+    final id = data['challengeId'] as String?;
+    if (id == null || id.isEmpty) {
+      throw const AuthException('Сервис не подтвердил код клиента.');
+    }
+    return EstimateSignatureOtpChallenge(
+      id: id,
+      maskedPhone: '',
+      verifiedAt: asDateOrNull(data['verifiedAt']),
+    );
+  }
+
   Future<String> uploadEstimatePdf({
     required String estimateId,
     required Uint8List bytes,
@@ -705,6 +924,22 @@ class SmetchikRepository {
     final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) return null;
     return trimmed;
+  }
+
+  static String _normalizeRussianPhone(String? value) {
+    var digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 10) digits = '7$digits';
+    if (digits.startsWith('8')) digits = '7${digits.substring(1)}';
+    if (digits.length != 11 || !digits.startsWith('7')) {
+      throw const AuthException('Для подписи нужен российский номер клиента.');
+    }
+    return '+$digits';
+  }
+
+  static Map<String, dynamic> _functionData(Object? value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    throw const AuthException('Сервер вернул неожиданный ответ.');
   }
 
   static String _catalogKey(String category, String title, String unit) {

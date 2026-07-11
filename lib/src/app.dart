@@ -14,6 +14,7 @@ import 'features/estimates/estimate_detail_screen.dart';
 import 'features/estimates/estimate_form_screen.dart';
 import 'features/estimates/estimates_screen.dart';
 import 'features/home/home_screen.dart';
+import 'features/legal/legal_documents_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'shared/app_shell.dart';
 
@@ -26,13 +27,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final path = state.uri.path;
       final isAuthPath = path == '/auth' || path == '/auth/reset';
+      final isLegalPath = path == '/legal' || path.startsWith('/legal/');
 
       if (!AppConfig.hasSupabaseConfig) {
         return path == '/config' ? null : '/config';
       }
 
       if (!auth.isLoggedIn) {
-        return isAuthPath ? null : '/auth';
+        return isAuthPath || isLegalPath ? null : '/auth';
       }
 
       if (auth.isPasswordRecovery && path != '/auth/reset') {
@@ -67,34 +69,48 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
-        path: '/home',
+        path: '/legal',
         pageBuilder: (context, state) =>
-            _page(state, const AppShell(selectedIndex: 0, child: HomeScreen())),
+            _page(state, const LegalDocumentsScreen()),
       ),
       GoRoute(
-        path: '/estimates',
+        path: '/legal/:id',
         pageBuilder: (context, state) => _page(
           state,
-          const AppShell(selectedIndex: 1, child: EstimatesScreen()),
+          LegalDocumentsScreen(documentId: state.pathParameters['id']),
         ),
       ),
-      GoRoute(
-        path: '/catalog',
-        pageBuilder: (context, state) => _page(state, const CatalogRoute()),
-      ),
-      GoRoute(
-        path: '/clients',
-        pageBuilder: (context, state) => _page(
-          state,
-          const AppShell(selectedIndex: 3, child: ClientsScreen()),
+      ShellRoute(
+        builder: (context, state, child) => AppShell(
+          selectedIndex: _shellIndexForPath(state.uri.path),
+          child: child,
         ),
-      ),
-      GoRoute(
-        path: '/settings',
-        pageBuilder: (context, state) => _page(
-          state,
-          const AppShell(selectedIndex: 4, child: SettingsScreen()),
-        ),
+        routes: [
+          GoRoute(
+            path: '/home',
+            pageBuilder: (context, state) => _page(state, const HomeScreen()),
+          ),
+          GoRoute(
+            path: '/estimates',
+            pageBuilder: (context, state) =>
+                _page(state, const EstimatesScreen()),
+          ),
+          GoRoute(
+            path: '/catalog',
+            pageBuilder: (context, state) =>
+                _page(state, const CatalogScreen()),
+          ),
+          GoRoute(
+            path: '/clients',
+            pageBuilder: (context, state) =>
+                _page(state, const ClientsScreen()),
+          ),
+          GoRoute(
+            path: '/settings',
+            pageBuilder: (context, state) =>
+                _page(state, const SettingsScreen()),
+          ),
+        ],
       ),
       GoRoute(
         path: '/clients/new',
@@ -116,7 +132,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/estimate/:id/edit',
         pageBuilder: (context, state) => _page(
           state,
-          EstimateFormScreen(estimateId: state.pathParameters['id']),
+          EstimateFormScreen(
+            estimateId: state.pathParameters['id'],
+            createRevision: state.uri.queryParameters['revision'] == 'true',
+          ),
         ),
       ),
       GoRoute(
@@ -149,4 +168,15 @@ class SmetchikApp extends ConsumerWidget {
 
 Page<void> _page(GoRouterState state, Widget child) {
   return NoTransitionPage<void>(key: state.pageKey, child: child);
+}
+
+int _shellIndexForPath(String path) {
+  return switch (path) {
+    '/home' => 0,
+    '/estimates' => 1,
+    '/catalog' => 2,
+    '/clients' => 3,
+    '/settings' => 4,
+    _ => 0,
+  };
 }

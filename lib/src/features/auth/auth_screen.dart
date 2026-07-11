@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/auth_controller.dart';
+import '../../legal/legal_documents.dart';
+import 'auth_legal_consent.dart';
 import '../../shared/russian_phone_input_formatter.dart';
 import '../../shared/ui.dart';
 
@@ -35,6 +37,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   late AuthEntryMode _mode;
   _CodeTarget _codeTarget = _CodeTarget.email;
   bool _codeRequested = false;
+  bool _termsAccepted = false;
+  bool _privacyAccepted = false;
   String? _error;
   String? _info;
 
@@ -180,6 +184,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 : () => _setMode(AuthEntryMode.resetRequest),
             child: const Text('Забыли пароль?'),
           ),
+        ),
+        const SizedBox(height: 10),
+        SignupConsentRow(
+          value: _termsAccepted,
+          label: 'Принимаю',
+          documentTitle: LegalDocuments.terms.title,
+          onChanged: (value) => setState(() => _termsAccepted = value),
+          onOpen: () => context.push('/legal/terms'),
+        ),
+        SignupConsentRow(
+          value: _privacyAccepted,
+          label: 'Соглашаюсь с',
+          documentTitle: LegalDocuments.privacy.title,
+          onChanged: (value) => setState(() => _privacyAccepted = value),
+          onOpen: () => context.push('/legal/privacy'),
         ),
         _Messages(error: _error, info: _info),
         const SizedBox(height: 14),
@@ -649,6 +668,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       _setError('Пароль должен быть не короче 6 символов');
       return;
     }
+    if (!_termsAccepted || !_privacyAccepted) {
+      _setError('Ознакомьтесь и согласитесь с документами для регистрации');
+      return;
+    }
 
     await _runAuthAction(() async {
       await ref
@@ -678,7 +701,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     await _runAuthAction(() async {
       await ref
           .read(authControllerProvider)
-          .signUp(email: email, password: password, fullName: name);
+          .signUp(
+            email: email,
+            password: password,
+            fullName: name,
+            termsVersion: LegalDocuments.terms.version,
+            privacyVersion: LegalDocuments.privacy.version,
+          );
       if (mounted) context.go('/home');
     });
   }
