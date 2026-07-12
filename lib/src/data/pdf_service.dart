@@ -201,10 +201,12 @@ class PdfService {
     return pw.PageTheme(
       pageFormat: _pageFormat(render),
       margin: _pageMargin(render),
-      buildBackground: (context) => pw.FullPage(
-        ignoreMargins: true,
-        child: pw.Container(color: render.background),
-      ),
+      buildBackground: render.hasColoredPageBackground
+          ? (context) => pw.FullPage(
+              ignoreMargins: true,
+              child: pw.Container(color: render.background),
+            )
+          : null,
       buildForeground: render.template.features.showWatermark
           ? (context) => pw.FullPage(
               ignoreMargins: true,
@@ -795,9 +797,18 @@ class PdfService {
     _PdfRenderOptions render,
     EstimateModel estimate,
   ) {
+    final masterDetails = [
+      render.profile?.specialization?.trim(),
+      render.profile?.phone?.trim(),
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' · ');
     return pw.Row(
       children: [
-        _signature(render, 'Исполнитель'),
+        _signature(
+          render,
+          'Исполнитель',
+          signerName: render.masterName,
+          details: masterDetails,
+        ),
         pw.SizedBox(width: 32),
         _signature(
           render,
@@ -814,6 +825,7 @@ class PdfService {
     _PdfRenderOptions render,
     String label, {
     String? signerName,
+    String? details,
     DateTime? signedAt,
     DateTime? phoneVerifiedAt,
   }) {
@@ -847,6 +859,13 @@ class PdfService {
                 : label,
             style: pw.TextStyle(color: render.secondaryText, fontSize: 9),
           ),
+          if (details?.trim().isNotEmpty == true) ...[
+            pw.SizedBox(height: 2),
+            pw.Text(
+              details!.trim(),
+              style: pw.TextStyle(color: render.secondaryText, fontSize: 8),
+            ),
+          ],
           if (signedAt != null) ...[
             pw.SizedBox(height: 2),
             pw.Text(
@@ -1064,6 +1083,9 @@ class _PdfRenderOptions {
       : 'Сметчик';
 
   bool get isStory => template.layout.aspectRatio == '9:16';
+  bool get hasColoredPageBackground =>
+      template.colors.background.toUpperCase() != '#FFFFFF' &&
+      !template.features.showCoverPage;
   bool get hasQrBlocks => paymentQrImage != null || contactQrImage != null;
   String get paymentQrLabel =>
       profile?.paymentQrLabel?.trim().isNotEmpty == true

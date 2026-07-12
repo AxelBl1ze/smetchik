@@ -381,12 +381,12 @@ class SmetaTemplates {
 
   static const coverDeluxe = SmetaTemplateConfig(
     id: 'premium_cover_deluxe',
-    name: 'Люкс-обложка (Cover Page Deluxe)',
-    shortName: 'Люкс-обложка',
-    description: 'обложка перед сметой',
+    name: 'Фирменный люкс',
+    shortName: 'Люкс',
+    description: 'выразительная фирменная шапка',
     isPremium: true,
     colors: SmetaTemplateColors(
-      background: '#3C3489',
+      background: '#FFFFFF',
       surface: '#FFFFFF',
       primaryText: '#1A1A18',
       secondaryText: '#6B6A64',
@@ -407,7 +407,6 @@ class SmetaTemplates {
     ),
     features: SmetaTemplateFeatures(
       showQrPayment: true,
-      showCoverPage: true,
       accentPresetChoices: ['#3C3489', '#085041'],
     ),
     icon: Icons.auto_awesome_outlined,
