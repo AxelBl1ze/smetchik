@@ -1,12 +1,14 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/app_config.dart';
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/pdf_service.dart';
@@ -331,12 +333,23 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
     WidgetRef ref,
     EstimateDetail detail,
     ProfileModel? profile,
-  ) {
+  ) async {
     final signedPath = detail.estimate.signedPdfStoragePath;
     if (signedPath != null && signedPath.isNotEmpty) {
       return ref.read(repositoryProvider).downloadSignedEstimatePdf(signedPath);
     }
-    return _buildPdf(detail, profile);
+    final bytes = await _buildPdf(detail, profile);
+    if (detail.estimate.isLocked) {
+      await ref
+          .read(repositoryProvider)
+          .storeSignedEstimatePdf(
+            estimateId: detail.estimate.id,
+            documentVersion: detail.estimate.documentVersion,
+            bytes: bytes,
+          );
+      ref.invalidate(estimateDetailProvider(detail.estimate.id));
+    }
+    return bytes;
   }
 
   Future<void> _setStatus(
@@ -385,6 +398,59 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
       );
       return;
     }
+    final method = await showModalBottomSheet<_SignatureMethod>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const _SignatureMethodSheet(),
+    );
+    if (method == null) return;
+    if (!context.mounted) return;
+    if (method == _SignatureMethod.link) {
+      await _showApprovalLink(context, ref, detail);
+      return;
+    }
+    await _acceptWithTelegramSignature(context, ref, detail, profile);
+  }
+
+  Future<void> _showApprovalLink(
+    BuildContext context,
+    WidgetRef ref,
+    EstimateDetail detail,
+  ) async {
+    setState(() => _pdfActionBusy = true);
+    try {
+      final link = await ref
+          .read(repositoryProvider)
+          .createEstimateApprovalLink(estimateId: detail.estimate.id);
+      if (!context.mounted) return;
+      final url = AppConfig.estimateApprovalUrl(link.token);
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) =>
+            _ApprovalQrSheet(url: url, expiresAt: link.expiresAt),
+      );
+      ref.invalidate(estimatesProvider);
+      ref.invalidate(estimateDetailProvider(detail.estimate.id));
+    } catch (error) {
+      if (context.mounted) {
+        _showFloatingSnackBar(context, error.toString(), isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _pdfActionBusy = false);
+    }
+  }
+
+  Future<void> _acceptWithTelegramSignature(
+    BuildContext context,
+    WidgetRef ref,
+    EstimateDetail detail,
+    ProfileModel? profile,
+  ) async {
+    final clientName = detail.estimate.client?.name.trim() ?? '';
+    final clientPhone = (detail.estimate.client?.phone ?? '').trim();
     final verification =
         await showModalBottomSheet<EstimateSignatureOtpChallenge>(
           context: context,
@@ -576,7 +642,7 @@ class _EstimateStatusActions extends StatelessWidget {
         EstimateStatus.sent,
       ),
       EstimateStatus.sent => (
-        hasClientSignature ? 'Клиент принял' : 'Принять с подписью',
+        hasClientSignature ? 'Клиент принял' : 'Получить подпись клиента',
         Icons.draw_outlined,
         EstimateStatus.accepted,
       ),
@@ -761,7 +827,7 @@ class _ClientSignatureStatusCard extends StatelessWidget {
                     Text(
                       estimate.clientSignedAt == null
                           ? 'Подпись добавлена в финальный PDF'
-                          : 'Подписано ${formatDateTime(estimate.clientSignedAt!)}${estimate.clientPhoneVerifiedAt == null ? '' : ' · номер подтверждён'}',
+                          : _signedCaption(estimate),
                       style: const TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 12,
@@ -780,6 +846,328 @@ class _ClientSignatureStatusCard extends StatelessWidget {
             label: const Text('Создать новую версию'),
           ),
         ],
+      ),
+    );
+  }
+
+  String _signedCaption(EstimateModel estimate) {
+    final signedAt = formatDateTime(estimate.clientSignedAt!);
+    return switch (estimate.clientSignatureMethod) {
+      'approval_link' => 'Подписано по QR-ссылке $signedAt',
+      'telegram_otp' => 'Подписано $signedAt · номер подтверждён',
+      _ => 'Подписано $signedAt',
+    };
+  }
+}
+
+enum _SignatureMethod { link, telegram }
+
+class _SignatureMethodSheet extends StatelessWidget {
+  const _SignatureMethodSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Подпись клиента',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Клиент может открыть смету на своём телефоне без приложения.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _SignatureMethodOption(
+                  icon: Icons.qr_code_2,
+                  title: 'Показать QR и ссылку',
+                  subtitle:
+                      'Основной способ: клиент сканирует QR, проверяет смету и расписывается на своём телефоне',
+                  primary: true,
+                  onTap: () => Navigator.of(context).pop(_SignatureMethod.link),
+                ),
+                const SizedBox(height: 10),
+                _SignatureMethodOption(
+                  icon: Icons.verified_user_outlined,
+                  title: 'Подтвердить номер в Telegram',
+                  subtitle:
+                      'Дополнительная проверка номера перед подписью на этом устройстве',
+                  onTap: () =>
+                      Navigator.of(context).pop(_SignatureMethod.telegram),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SignatureMethodOption extends StatelessWidget {
+  const _SignatureMethodOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.primary = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: primary ? AppColors.orangeLight : AppColors.background,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: primary
+                  ? AppColors.orange.withValues(alpha: 0.28)
+                  : AppColors.border,
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: primary ? AppColors.orange : Colors.white,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(
+                  icon,
+                  color: primary ? Colors.white : AppColors.orange,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, color: AppColors.textHint),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ApprovalQrSheet extends StatelessWidget {
+  const _ApprovalQrSheet({required this.url, required this.expiresAt});
+
+  final String url;
+  final DateTime expiresAt;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 18),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppColors.orangeLight,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_2,
+                        color: AppColors.orange,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Покажите QR клиенту',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            'Он откроет смету на своём телефоне и подпишет её',
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Закрыть',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: QrImageView(
+                      data: url,
+                      size: 208,
+                      eyeStyle: const QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: AppColors.graphite,
+                      ),
+                      dataModuleStyle: const QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: AppColors.graphite,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Ссылка одноразовая и действует до ${formatDateTime(expiresAt)}.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(ClipboardData(text: url));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Ссылка скопирована'),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.content_copy_outlined),
+                        label: const Text('Копировать'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () => SharePlus.instance.share(
+                          ShareParams(
+                            text: 'Подтвердите смету в Сметчике: $url',
+                          ),
+                        ),
+                        icon: const Icon(Icons.ios_share),
+                        label: const Text('Отправить'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

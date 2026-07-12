@@ -10,6 +10,7 @@ import 'features/catalog/catalog_screen.dart';
 import 'features/clients/client_form_screen.dart';
 import 'features/clients/clients_screen.dart';
 import 'features/config/config_required_screen.dart';
+import 'features/estimates/client_approval_screen.dart';
 import 'features/estimates/estimate_detail_screen.dart';
 import 'features/estimates/estimate_form_screen.dart';
 import 'features/estimates/estimates_screen.dart';
@@ -28,13 +29,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final path = state.uri.path;
       final isAuthPath = path == '/auth' || path == '/auth/reset';
       final isLegalPath = path == '/legal' || path.startsWith('/legal/');
+      final isApprovalPath = path.startsWith('/approve/');
 
       if (!AppConfig.hasSupabaseConfig) {
         return path == '/config' ? null : '/config';
       }
 
       if (!auth.isLoggedIn) {
-        return isAuthPath || isLegalPath ? null : '/auth';
+        return isAuthPath || isLegalPath || isApprovalPath ? null : '/auth';
       }
 
       if (auth.isPasswordRecovery && path != '/auth/reset') {
@@ -78,6 +80,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _page(
           state,
           LegalDocumentsScreen(documentId: state.pathParameters['id']),
+        ),
+      ),
+      GoRoute(
+        path: '/approve/:token',
+        pageBuilder: (context, state) => _page(
+          state,
+          ClientApprovalScreen(token: state.pathParameters['token']!),
         ),
       ),
       ShellRoute(

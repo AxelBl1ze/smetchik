@@ -828,6 +828,7 @@ class SmetchikRepository {
           'client_signed_name': clientName.trim(),
           'client_signed_phone': normalizedClientPhone,
           'client_signature_otp_challenge_id': signatureChallengeId,
+          'client_signature_method': 'telegram_otp',
           'client_signature_statement_version': clientSignatureStatementVersion,
           'client_signature_statement': clientSignatureStatement,
           'signed_document_snapshot': signedSnapshot,
@@ -848,6 +849,52 @@ class SmetchikRepository {
 
   Future<Uint8List> downloadSignedEstimatePdf(String path) {
     return _client.storage.from('signed-estimate-pdfs').download(path);
+  }
+
+  Future<EstimateApprovalLink> createEstimateApprovalLink({
+    required String estimateId,
+  }) async {
+    final response = await _client.functions.invoke(
+      'estimate-approval',
+      body: {'action': 'create', 'estimateId': estimateId},
+    );
+    final data = _functionData(response.data);
+    final token = data['token'] as String?;
+    final expiresAt = asDateOrNull(data['expiresAt']);
+    if (token == null || token.isEmpty || expiresAt == null) {
+      throw const AuthException(
+        'Сервис не смог подготовить ссылку для клиента.',
+      );
+    }
+    return EstimateApprovalLink(token: token, expiresAt: expiresAt);
+  }
+
+  Future<String> storeSignedEstimatePdf({
+    required String estimateId,
+    required int documentVersion,
+    required Uint8List bytes,
+  }) async {
+    final version = DateTime.now().millisecondsSinceEpoch;
+    final path = '$_userId/$estimateId/v$documentVersion-$version-signed.pdf';
+    await _client.storage
+        .from('signed-estimate-pdfs')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(contentType: 'application/pdf'),
+        );
+    final updated = await _client
+        .from('estimates')
+        .update({'signed_pdf_storage_path': path})
+        .eq('id', estimateId)
+        .eq('user_id', _userId)
+        .isFilter('signed_pdf_storage_path', null)
+        .select('id')
+        .maybeSingle();
+    if (updated == null) {
+      return path;
+    }
+    return path;
   }
 
   Future<EstimateSignatureOtpChallenge> requestEstimateSignatureCode({

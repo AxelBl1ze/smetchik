@@ -8,6 +8,11 @@ const clientSignatureStatement =
 const clientSignatureDisclosure =
     'Подпись фиксирует принятие сметы на этом устройстве. Для использования простой электронной подписи с подтверждением личности потребуется отдельный код клиента.';
 
+const clientApprovalLinkStatementVersion = 'client-approval-link-v1';
+
+const clientApprovalLinkStatement =
+    'Нажимая «Принять смету», я подтверждаю, что ознакомился(ась) с указанной версией сметы, согласен(на) с её условиями и принимаю документ. Я согласен(на) на фиксацию подписи, даты, времени, технических сведений о подписании и версии документа в сервисе «Сметчик».';
+
 Map<String, dynamic> buildSignedEstimateSnapshot({
   required EstimateDetail detail,
   required ProfileModel? profile,

@@ -58,4 +58,10 @@ void main() {
     expect(client['name'], 'Иван Петров');
     expect(client['phone'], '+7 900 000-00-00');
   });
+
+  test('defines a separate consent statement for signing by QR link', () {
+    expect(clientApprovalLinkStatementVersion, 'client-approval-link-v1');
+    expect(clientApprovalLinkStatement, contains('Принять смету'));
+    expect(clientApprovalLinkStatement, contains('версией сметы'));
+  });
 }

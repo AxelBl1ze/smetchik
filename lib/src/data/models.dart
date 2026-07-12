@@ -582,6 +582,9 @@ class EstimateModel {
     this.clientSignedName,
     this.clientSignedPhone,
     this.clientSignatureOtpChallengeId,
+    this.clientSignatureMethod,
+    this.clientSignatureLinkId,
+    this.signedDocumentHash,
     this.clientPhoneVerifiedAt,
     this.clientSignatureStatementVersion,
     required this.createdAt,
@@ -605,6 +608,9 @@ class EstimateModel {
   final String? clientSignedName;
   final String? clientSignedPhone;
   final String? clientSignatureOtpChallengeId;
+  final String? clientSignatureMethod;
+  final String? clientSignatureLinkId;
+  final String? signedDocumentHash;
   final DateTime? clientPhoneVerifiedAt;
   final String? clientSignatureStatementVersion;
   final DateTime createdAt;
@@ -635,6 +641,9 @@ class EstimateModel {
       clientSignedPhone: map['client_signed_phone'] as String?,
       clientSignatureOtpChallengeId:
           map['client_signature_otp_challenge_id'] as String?,
+      clientSignatureMethod: map['client_signature_method'] as String?,
+      clientSignatureLinkId: map['client_signature_link_id'] as String?,
+      signedDocumentHash: map['signed_document_hash'] as String?,
       clientPhoneVerifiedAt: asDateOrNull(map['client_phone_verified_at']),
       clientSignatureStatementVersion:
           map['client_signature_statement_version'] as String?,
@@ -661,6 +670,9 @@ class EstimateModel {
     String? clientSignedName,
     String? clientSignedPhone,
     String? clientSignatureOtpChallengeId,
+    String? clientSignatureMethod,
+    String? clientSignatureLinkId,
+    String? signedDocumentHash,
     DateTime? clientPhoneVerifiedAt,
     String? clientSignatureStatementVersion,
     DateTime? createdAt,
@@ -685,6 +697,11 @@ class EstimateModel {
       clientSignedPhone: clientSignedPhone ?? this.clientSignedPhone,
       clientSignatureOtpChallengeId:
           clientSignatureOtpChallengeId ?? this.clientSignatureOtpChallengeId,
+      clientSignatureMethod:
+          clientSignatureMethod ?? this.clientSignatureMethod,
+      clientSignatureLinkId:
+          clientSignatureLinkId ?? this.clientSignatureLinkId,
+      signedDocumentHash: signedDocumentHash ?? this.signedDocumentHash,
       clientPhoneVerifiedAt:
           clientPhoneVerifiedAt ?? this.clientPhoneVerifiedAt,
       clientSignatureStatementVersion:
@@ -785,6 +802,13 @@ class EstimateSignatureOtpChallenge {
   final String maskedPhone;
   final DateTime? expiresAt;
   final DateTime? verifiedAt;
+}
+
+class EstimateApprovalLink {
+  const EstimateApprovalLink({required this.token, required this.expiresAt});
+
+  final String token;
+  final DateTime expiresAt;
 }
 
 class EstimateDraft {

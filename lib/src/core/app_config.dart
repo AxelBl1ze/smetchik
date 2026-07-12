@@ -12,6 +12,16 @@ class AppConfig {
     defaultValue: _defaultSupabaseAnonKey,
   );
 
+  static const publicAppUrl = String.fromEnvironment(
+    'PUBLIC_APP_URL',
+    defaultValue: 'https://smetchik.mcreeper76.workers.dev',
+  );
+
+  static String estimateApprovalUrl(String token) {
+    final base = publicAppUrl.replaceFirst(RegExp(r'/+$'), '');
+    return '$base/#/approve/$token';
+  }
+
   static bool get hasSupabaseConfig =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 }
