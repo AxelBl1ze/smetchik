@@ -42,6 +42,9 @@ ThemeData buildAppTheme() {
       foregroundColor: AppColors.graphite,
       centerTitle: false,
       elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      shadowColor: Colors.transparent,
       titleTextStyle: textTheme.titleLarge?.copyWith(
         fontWeight: FontWeight.w800,
         color: AppColors.graphite,

@@ -32,7 +32,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _paymentQrLabel = TextEditingController();
   final _contactQrLabel = TextEditingController();
   final _nameFocus = FocusNode();
-  String _currency = 'RUB';
   String _pdfTemplate = PdfTemplate.brightAccent;
   String _pdfAccentColor = PdfAccentColor.orange;
   bool _pdfShowBrandHeader = true;
@@ -150,7 +149,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const _CardTitle(
                     icon: Icons.badge_outlined,
                     title: 'Информация мастера',
-                    subtitle: 'Телефон, специализация и валюта',
+                    subtitle: 'Телефон и специализация',
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -164,25 +163,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 12),
                   SpecializationField(controller: _spec),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: _currency,
-                    decoration: const InputDecoration(
-                      labelText: 'Валюта',
-                      prefixIcon: Icon(Icons.payments_outlined),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'RUB',
-                        child: Text('₽ Российский рубль'),
-                      ),
-                      DropdownMenuItem(value: 'USD', child: Text('\$ Доллар')),
-                      DropdownMenuItem(value: 'EUR', child: Text('€ Евро')),
-                    ],
-                    onChanged: (value) =>
-                        setState(() => _currency = value ?? 'RUB'),
-                  ),
                 ],
               ),
             ),
@@ -460,6 +440,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _SettingsFeatureSheet(
         maxWidth: 760,
+        onClose: () => Navigator.of(sheetContext).pop(),
         child: _AdvancedStatsCard(
           profile: profile,
           estimates: estimates,
@@ -486,6 +467,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
           return _SettingsFeatureSheet(
             maxWidth: 820,
+            onClose: () => Navigator.of(sheetContext).pop(),
             child: _PdfSettingsCard(
               profile: profile,
               busy: _saving,
@@ -650,7 +632,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _name.text = profile.fullName;
     _phone.text = RussianPhoneInputFormatter.format(profile.phone ?? '');
     _spec.text = profile.specialization ?? '';
-    _currency = profile.currency;
     _pdfTemplate = profile.pdfTemplate;
     _pdfAccentColor = profile.pdfAccentColor;
     _pdfShowBrandHeader = profile.pdfShowBrandHeader;
@@ -673,7 +654,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             specialization: normalizeSpecialization(_spec.text),
             paymentQrLabel: _paymentQrLabel.text,
             contactQrLabel: _contactQrLabel.text,
-            currency: _currency,
+            currency: 'RUB',
           );
       ref.invalidate(profileProvider);
       if (!mounted) return;
@@ -1452,10 +1433,15 @@ class _SignaturePainter extends CustomPainter {
 }
 
 class _SettingsFeatureSheet extends StatelessWidget {
-  const _SettingsFeatureSheet({required this.child, required this.maxWidth});
+  const _SettingsFeatureSheet({
+    required this.child,
+    required this.maxWidth,
+    required this.onClose,
+  });
 
   final Widget child;
   final double maxWidth;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -1494,17 +1480,31 @@ class _SettingsFeatureSheet extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: AppColors.border,
-                            borderRadius: BorderRadius.circular(99),
-                          ),
+                      SizedBox(
+                        height: 40,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: AppColors.border,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: IconButton(
+                                tooltip: 'Закрыть',
+                                onPressed: onClose,
+                                icon: const Icon(Icons.close),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 4),
                       child,
                     ],
                   ),

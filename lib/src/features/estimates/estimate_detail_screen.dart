@@ -40,10 +40,14 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
     final detail = ref.watch(estimateDetailProvider(estimateId));
     final profile = ref.watch(profileProvider);
     final isLocked = detail.asData?.value.estimate.isLocked == true;
+    final documentCode = estimateId
+        .replaceAll('-', '')
+        .substring(0, 6)
+        .toUpperCase();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Смета'),
+        title: Text('Смета #$documentCode'),
         actions: [
           IconButton(
             tooltip: 'На главную',
