@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -425,15 +426,21 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
           .createEstimateApprovalLink(estimateId: detail.estimate.id);
       if (!context.mounted) return;
       final url = AppConfig.estimateApprovalUrl(link.token);
-      await showModalBottomSheet<void>(
+      final wasSigned = await showModalBottomSheet<bool>(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
-        builder: (sheetContext) =>
-            _ApprovalQrSheet(url: url, expiresAt: link.expiresAt),
+        builder: (sheetContext) => _ApprovalQrSheet(
+          url: url,
+          expiresAt: link.expiresAt,
+          estimateId: detail.estimate.id,
+        ),
       );
       ref.invalidate(estimatesProvider);
       ref.invalidate(estimateDetailProvider(detail.estimate.id));
+      if (wasSigned == true && context.mounted) {
+        _showFloatingSnackBar(context, 'Клиент подтвердил смету.');
+      }
     } catch (error) {
       if (context.mounted) {
         _showFloatingSnackBar(context, error.toString(), isError: true);
@@ -1021,14 +1028,66 @@ class _SignatureMethodOption extends StatelessWidget {
   }
 }
 
-class _ApprovalQrSheet extends StatelessWidget {
-  const _ApprovalQrSheet({required this.url, required this.expiresAt});
+class _ApprovalQrSheet extends ConsumerStatefulWidget {
+  const _ApprovalQrSheet({
+    required this.url,
+    required this.expiresAt,
+    required this.estimateId,
+  });
 
   final String url;
   final DateTime expiresAt;
+  final String estimateId;
+
+  @override
+  ConsumerState<_ApprovalQrSheet> createState() => _ApprovalQrSheetState();
+}
+
+class _ApprovalQrSheetState extends ConsumerState<_ApprovalQrSheet> {
+  Timer? _poller;
+  bool _checking = false;
+  bool _signed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _poller = Timer.periodic(const Duration(seconds: 2), (_) => _checkStatus());
+    Future<void>.delayed(const Duration(milliseconds: 700), _checkStatus);
+  }
+
+  @override
+  void dispose() {
+    _poller?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkStatus() async {
+    if (_checking || _signed) return;
+    _checking = true;
+    try {
+      final detail = await ref
+          .read(repositoryProvider)
+          .fetchEstimateDetail(widget.estimateId);
+      if (detail.estimate.clientSignedAt == null) return;
+
+      _poller?.cancel();
+      ref.invalidate(estimatesProvider);
+      ref.invalidate(estimateDetailProvider(widget.estimateId));
+      if (!mounted) return;
+      setState(() => _signed = true);
+      await Future<void>.delayed(const Duration(milliseconds: 900));
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      // The next short poll will retry. A temporary network failure should not
+      // close the QR sheet while the client is still signing.
+    } finally {
+      _checking = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final signed = _signed;
     return SafeArea(
       top: false,
       child: Align(
@@ -1069,19 +1128,21 @@ class _ApprovalQrSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Покажите QR клиенту',
+                            signed ? 'Смета подписана' : 'Покажите QR клиенту',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
                           Text(
-                            'Он откроет смету на своём телефоне и подпишет её',
+                            signed
+                                ? 'Статус обновлён. Закрываем окно...'
+                                : 'Он откроет смету на своём телефоне и подпишет её',
                             style: TextStyle(
                               color: AppColors.textSecondary,
                               fontSize: 12,
@@ -1091,78 +1152,124 @@ class _ApprovalQrSheet extends StatelessWidget {
                         ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: 'Закрыть',
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
+                    if (!signed)
+                      IconButton(
+                        tooltip: 'Закрыть',
+                        onPressed: () => Navigator.of(context).pop(false),
+                        icon: const Icon(Icons.close),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: QrImageView(
-                      data: url,
-                      size: 208,
-                      eyeStyle: const QrEyeStyle(
-                        eyeShape: QrEyeShape.square,
-                        color: AppColors.graphite,
-                      ),
-                      dataModuleStyle: const QrDataModuleStyle(
-                        dataModuleShape: QrDataModuleShape.square,
-                        color: AppColors.graphite,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Ссылка одноразовая и действует до ${formatDateTime(expiresAt)}.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () async {
-                          await Clipboard.setData(ClipboardData(text: url));
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Ссылка скопирована'),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 240),
+                  child: signed
+                      ? Padding(
+                          key: const ValueKey('signed'),
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Column(
+                            children: [
+                              Container(
+                                width: 82,
+                                height: 82,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.successBg,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.check_rounded,
+                                  color: AppColors.success,
+                                  size: 48,
+                                ),
                               ),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.content_copy_outlined),
-                        label: const Text('Копировать'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () => SharePlus.instance.share(
-                          ShareParams(
-                            text: 'Подтвердите смету в Сметчике: $url',
+                              const SizedBox(height: 14),
+                              const Text(
+                                'Подтверждение получено',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
                           ),
+                        )
+                      : Column(
+                          key: const ValueKey('qr'),
+                          children: [
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: QrImageView(
+                                  data: widget.url,
+                                  size: 208,
+                                  eyeStyle: const QrEyeStyle(
+                                    eyeShape: QrEyeShape.square,
+                                    color: AppColors.graphite,
+                                  ),
+                                  dataModuleStyle: const QrDataModuleStyle(
+                                    dataModuleShape: QrDataModuleShape.square,
+                                    color: AppColors.graphite,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Ссылка одноразовая и действует до ${formatDateTime(widget.expiresAt)}.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () async {
+                                      await Clipboard.setData(
+                                        ClipboardData(text: widget.url),
+                                      );
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Ссылка скопирована'),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    icon: const Icon(
+                                      Icons.content_copy_outlined,
+                                    ),
+                                    label: const Text('Копировать'),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: FilledButton.icon(
+                                    onPressed: () => SharePlus.instance.share(
+                                      ShareParams(
+                                        text:
+                                            'Подтвердите смету в Сметчике: ${widget.url}',
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.ios_share),
+                                    label: const Text('Отправить'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                        icon: const Icon(Icons.ios_share),
-                        label: const Text('Отправить'),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -449,14 +450,19 @@ class _ApprovalForm extends StatelessWidget {
             borderRadius: BorderRadius.circular(18),
             child: AspectRatio(
               aspectRatio: 2.55,
-              child: GestureDetector(
+              child: RawGestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onPanStart: consentAccepted && !saving
-                    ? (details) => onStartStroke(details.localPosition)
-                    : null,
-                onPanUpdate: consentAccepted && !saving
-                    ? (details) => onAppendStroke(details.localPosition)
-                    : null,
+                gestures: consentAccepted && !saving
+                    ? <Type, GestureRecognizerFactory>{
+                        _SignatureStrokeRecognizer:
+                            GestureRecognizerFactoryWithHandlers<
+                              _SignatureStrokeRecognizer
+                            >(_SignatureStrokeRecognizer.new, (recognizer) {
+                              recognizer.onStart = onStartStroke;
+                              recognizer.onUpdate = onAppendStroke;
+                            }),
+                      }
+                    : const <Type, GestureRecognizerFactory>{},
                 child: CustomPaint(
                   key: signatureKey,
                   painter: _SignaturePainter(strokes: strokes),
@@ -508,6 +514,43 @@ class _ApprovalForm extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Claims the pointer as soon as it touches the signature field, so a
+/// vertical handwriting stroke cannot be interpreted as page scrolling.
+class _SignatureStrokeRecognizer extends OneSequenceGestureRecognizer {
+  ValueChanged<Offset>? onStart;
+  ValueChanged<Offset>? onUpdate;
+  int? _activePointer;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (_activePointer != null) return;
+    super.addAllowedPointer(event);
+    _activePointer = event.pointer;
+    resolve(GestureDisposition.accepted);
+    onStart?.call(event.localPosition);
+  }
+
+  @override
+  void handleEvent(PointerEvent event) {
+    if (event.pointer != _activePointer) return;
+    if (event is PointerMoveEvent) {
+      onUpdate?.call(event.localPosition);
+    }
+    if (event is PointerUpEvent || event is PointerCancelEvent) {
+      stopTrackingPointer(event.pointer);
+      _activePointer = null;
+    }
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    _activePointer = null;
+  }
+
+  @override
+  String get debugDescription => 'signature stroke';
 }
 
 class _VersionChip extends StatelessWidget {
