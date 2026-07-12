@@ -28,6 +28,7 @@ class _ClientApprovalScreenState extends State<ClientApprovalScreen> {
   final _phone = TextEditingController();
   final _signatureKey = GlobalKey();
   final List<List<Offset>> _strokes = [];
+  final ValueNotifier<int> _signatureRevision = ValueNotifier(0);
   bool _consentAccepted = false;
   bool _saving = false;
   bool _prefilled = false;
@@ -44,6 +45,7 @@ class _ClientApprovalScreenState extends State<ClientApprovalScreen> {
   void dispose() {
     _name.dispose();
     _phone.dispose();
+    _signatureRevision.dispose();
     super.dispose();
   }
 
@@ -74,6 +76,7 @@ class _ClientApprovalScreenState extends State<ClientApprovalScreen> {
               phoneController: _phone,
               signatureKey: _signatureKey,
               strokes: _strokes,
+              signatureRevision: _signatureRevision,
               consentAccepted: _consentAccepted,
               saving: _saving,
               error: _error,
@@ -82,7 +85,7 @@ class _ClientApprovalScreenState extends State<ClientApprovalScreen> {
               onOpenAgreement: () => context.push('/legal/signature'),
               onStartStroke: _startStroke,
               onAppendStroke: _appendStroke,
-              onClear: _strokes.isEmpty ? null : () => setState(_strokes.clear),
+              onClear: _strokes.isEmpty ? null : _clearSignature,
               onSign: () => _sign(approval),
             );
           },
@@ -121,7 +124,13 @@ class _ClientApprovalScreenState extends State<ClientApprovalScreen> {
 
   void _appendStroke(Offset point) {
     if (_strokes.isEmpty || !_consentAccepted || _saving) return;
-    setState(() => _strokes.last.add(point));
+    _strokes.last.add(point);
+    _signatureRevision.value++;
+  }
+
+  void _clearSignature() {
+    setState(() => _strokes.clear());
+    _signatureRevision.value++;
   }
 
   bool get _hasSignature => _strokes.any((stroke) => stroke.length > 1);
@@ -197,6 +206,7 @@ class _ApprovalForm extends StatelessWidget {
     required this.phoneController,
     required this.signatureKey,
     required this.strokes,
+    required this.signatureRevision,
     required this.consentAccepted,
     required this.saving,
     required this.error,
@@ -213,6 +223,7 @@ class _ApprovalForm extends StatelessWidget {
   final TextEditingController phoneController;
   final GlobalKey signatureKey;
   final List<List<Offset>> strokes;
+  final Listenable signatureRevision;
   final bool consentAccepted;
   final bool saving;
   final String? error;
@@ -463,23 +474,28 @@ class _ApprovalForm extends StatelessWidget {
                             }),
                       }
                     : const <Type, GestureRecognizerFactory>{},
-                child: CustomPaint(
-                  key: signatureKey,
-                  painter: _SignaturePainter(strokes: strokes),
-                  child: strokes.any((stroke) => stroke.length > 1)
-                      ? const SizedBox.expand()
-                      : Center(
-                          child: Text(
-                            consentAccepted
-                                ? 'Поставьте подпись'
-                                : 'Подпись станет доступна после согласия',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: AppColors.textHint,
-                              fontWeight: FontWeight.w800,
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    key: signatureKey,
+                    painter: _SignaturePainter(
+                      strokes: strokes,
+                      repaint: signatureRevision,
+                    ),
+                    child: strokes.any((stroke) => stroke.length > 1)
+                        ? const SizedBox.expand()
+                        : Center(
+                            child: Text(
+                              consentAccepted
+                                  ? 'Поставьте подпись'
+                                  : 'Подпись станет доступна после согласия',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: AppColors.textHint,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
-                        ),
+                  ),
                 ),
               ),
             ),
@@ -716,7 +732,7 @@ class _InlineError extends StatelessWidget {
 }
 
 class _SignaturePainter extends CustomPainter {
-  const _SignaturePainter({required this.strokes});
+  _SignaturePainter({required this.strokes, super.repaint});
 
   final List<List<Offset>> strokes;
 
@@ -739,7 +755,8 @@ class _SignaturePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SignaturePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) =>
+      oldDelegate.strokes != strokes;
 }
 
 class _PublicApproval {

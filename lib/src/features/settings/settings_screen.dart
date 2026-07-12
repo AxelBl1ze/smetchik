@@ -333,8 +333,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_saving) return;
     final picked = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      maxWidth: 1024,
-      imageQuality: 88,
+      // The avatar is shown at 64 px in the app and as a small mark in PDF.
+      // Keeping a compact source avoids expensive image decoding on phones.
+      maxWidth: 640,
+      imageQuality: 82,
     );
     if (picked == null) return;
 
@@ -1253,8 +1255,15 @@ class _SignaturePadSheet extends StatefulWidget {
 class _SignaturePadSheetState extends State<_SignaturePadSheet> {
   final _paintKey = GlobalKey();
   final List<List<Offset>> _strokes = [];
+  final ValueNotifier<int> _signatureRevision = ValueNotifier(0);
 
   bool get _hasSignature => _strokes.any((stroke) => stroke.length > 1);
+
+  @override
+  void dispose() {
+    _signatureRevision.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1319,20 +1328,25 @@ class _SignaturePadSheetState extends State<_SignaturePadSheet> {
                             _startStroke(details.localPosition),
                         onPanUpdate: (details) =>
                             _appendPoint(details.localPosition),
-                        child: CustomPaint(
-                          key: _paintKey,
-                          painter: _SignaturePainter(strokes: _strokes),
-                          child: _hasSignature
-                              ? const SizedBox.expand()
-                              : const Center(
-                                  child: Text(
-                                    'место для росписи',
-                                    style: TextStyle(
-                                      color: AppColors.textHint,
-                                      fontWeight: FontWeight.w800,
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            key: _paintKey,
+                            painter: _SignaturePainter(
+                              strokes: _strokes,
+                              repaint: _signatureRevision,
+                            ),
+                            child: _hasSignature
+                                ? const SizedBox.expand()
+                                : const Center(
+                                    child: Text(
+                                      'место для росписи',
+                                      style: TextStyle(
+                                        color: AppColors.textHint,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
                                   ),
-                                ),
+                          ),
                         ),
                       ),
                     ),
@@ -1372,11 +1386,13 @@ class _SignaturePadSheetState extends State<_SignaturePadSheet> {
 
   void _appendPoint(Offset point) {
     if (_strokes.isEmpty) return;
-    setState(() => _strokes.last.add(point));
+    _strokes.last.add(point);
+    _signatureRevision.value++;
   }
 
   void _clear() {
     setState(_strokes.clear);
+    _signatureRevision.value++;
   }
 
   Future<void> _save() async {
@@ -1388,7 +1404,7 @@ class _SignaturePadSheetState extends State<_SignaturePadSheet> {
   }
 
   Future<Uint8List> _renderSignature(Size sourceSize) async {
-    const targetSize = Size(1040, 400);
+    const targetSize = Size(720, 278);
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.scale(
@@ -1407,7 +1423,7 @@ class _SignaturePadSheetState extends State<_SignaturePadSheet> {
 }
 
 class _SignaturePainter extends CustomPainter {
-  const _SignaturePainter({required this.strokes});
+  _SignaturePainter({required this.strokes, super.repaint});
 
   final List<List<Offset>> strokes;
 
@@ -1431,7 +1447,8 @@ class _SignaturePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SignaturePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) =>
+      oldDelegate.strokes != strokes;
 }
 
 class _SettingsFeatureSheet extends StatelessWidget {

@@ -1554,10 +1554,17 @@ class _ClientSignaturePadSheet extends StatefulWidget {
 class _ClientSignaturePadSheetState extends State<_ClientSignaturePadSheet> {
   final _paintKey = GlobalKey();
   final List<List<Offset>> _strokes = [];
+  final ValueNotifier<int> _signatureRevision = ValueNotifier(0);
   bool _confirmedStatement = false;
 
   bool get _canSave =>
       _confirmedStatement && _strokes.any((stroke) => stroke.length > 1);
+
+  @override
+  void dispose() {
+    _signatureRevision.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1688,22 +1695,27 @@ class _ClientSignaturePadSheetState extends State<_ClientSignaturePadSheet> {
                         onPanUpdate: _confirmedStatement
                             ? (details) => _appendPoint(details.localPosition)
                             : null,
-                        child: CustomPaint(
-                          key: _paintKey,
-                          painter: _ClientSignaturePainter(strokes: _strokes),
-                          child: _strokes.isNotEmpty
-                              ? const SizedBox.expand()
-                              : Center(
-                                  child: Text(
-                                    _confirmedStatement
-                                        ? 'клиент расписывается здесь'
-                                        : 'подтвердите принятие перед подписью',
-                                    style: TextStyle(
-                                      color: AppColors.textHint,
-                                      fontWeight: FontWeight.w800,
+                        child: RepaintBoundary(
+                          child: CustomPaint(
+                            key: _paintKey,
+                            painter: _ClientSignaturePainter(
+                              strokes: _strokes,
+                              repaint: _signatureRevision,
+                            ),
+                            child: _strokes.isNotEmpty
+                                ? const SizedBox.expand()
+                                : Center(
+                                    child: Text(
+                                      _confirmedStatement
+                                          ? 'клиент расписывается здесь'
+                                          : 'подтвердите принятие перед подписью',
+                                      style: TextStyle(
+                                        color: AppColors.textHint,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
                                   ),
-                                ),
+                          ),
                         ),
                       ),
                     ),
@@ -1743,11 +1755,13 @@ class _ClientSignaturePadSheetState extends State<_ClientSignaturePadSheet> {
 
   void _appendPoint(Offset point) {
     if (_strokes.isEmpty) return;
-    setState(() => _strokes.last.add(point));
+    _strokes.last.add(point);
+    _signatureRevision.value++;
   }
 
   void _clear() {
     setState(_strokes.clear);
+    _signatureRevision.value++;
   }
 
   Future<void> _save() async {
@@ -1778,7 +1792,7 @@ class _ClientSignaturePadSheetState extends State<_ClientSignaturePadSheet> {
 }
 
 class _ClientSignaturePainter extends CustomPainter {
-  const _ClientSignaturePainter({required this.strokes});
+  _ClientSignaturePainter({required this.strokes, super.repaint});
 
   final List<List<Offset>> strokes;
 
@@ -1802,7 +1816,8 @@ class _ClientSignaturePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _ClientSignaturePainter oldDelegate) => true;
+  bool shouldRepaint(covariant _ClientSignaturePainter oldDelegate) =>
+      oldDelegate.strokes != strokes;
 }
 
 class _PdfPreviewCard extends StatelessWidget {

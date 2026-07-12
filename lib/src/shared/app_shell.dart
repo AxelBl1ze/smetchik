@@ -179,77 +179,79 @@ class _FloatingCapsuleNavBar extends StatelessWidget {
     return Container(
       color: AppColors.background,
       padding: EdgeInsets.fromLTRB(10, 14, 10, bottom > 0 ? bottom + 6 : 10),
-      child: Container(
-        height: 62,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFAF7EF),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final itemWidth = constraints.maxWidth / labels.length;
-            final capsuleWidth = (itemWidth - 4).clamp(58.0, 82.0).toDouble();
-            final capsuleLeft =
-                itemWidth * selectedIndex + (itemWidth - capsuleWidth) / 2;
+      child: RepaintBoundary(
+        child: Container(
+          height: 62,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFAF7EF),
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final itemWidth = constraints.maxWidth / labels.length;
+              final capsuleWidth = (itemWidth - 4).clamp(58.0, 82.0).toDouble();
+              final capsuleLeft =
+                  itemWidth * selectedIndex + (itemWidth - capsuleWidth) / 2;
 
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 280),
-                  curve: Curves.easeOutCubic,
-                  left: capsuleLeft,
-                  top: -12,
-                  width: capsuleWidth,
-                  height: 52,
-                  child: DecoratedBox(
-                    key: const Key('floating-nav-capsule'),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFFF0A25E), AppColors.orange],
-                      ),
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.orange.withValues(alpha: 0.34),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    left: capsuleLeft,
+                    top: -12,
+                    width: capsuleWidth,
+                    height: 52,
+                    child: DecoratedBox(
+                      key: const Key('floating-nav-capsule'),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFFF0A25E), AppColors.orange],
                         ),
-                      ],
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.orange.withValues(alpha: 0.34),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Row(
-                  children: [
-                    for (var index = 0; index < labels.length; index++)
-                      Expanded(
-                        child: _FloatingCapsuleNavItem(
-                          selected: selectedIndex == index,
-                          icon: icons[index],
-                          selectedIcon: selectedIcons[index],
-                          label: labels[index],
-                          onTap: () {
-                            if (selectedIndex == index) return;
-                            HapticFeedback.selectionClick();
-                            onTap(index);
-                          },
+                  Row(
+                    children: [
+                      for (var index = 0; index < labels.length; index++)
+                        Expanded(
+                          child: _FloatingCapsuleNavItem(
+                            selected: selectedIndex == index,
+                            icon: icons[index],
+                            selectedIcon: selectedIcons[index],
+                            label: labels[index],
+                            onTap: () {
+                              if (selectedIndex == index) return;
+                              HapticFeedback.selectionClick();
+                              onTap(index);
+                            },
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-              ],
-            );
-          },
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

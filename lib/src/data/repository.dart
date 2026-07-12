@@ -203,38 +203,25 @@ class SmetchikRepository {
     };
     final version = DateTime.now().millisecondsSinceEpoch;
     final path = '$_userId/avatar-$version.$extension';
-    await _client.storage
-        .from('logos')
-        .uploadBinary(
-          path,
-          bytes,
-          fileOptions: FileOptions(upsert: true, contentType: contentType),
-        );
-    await _client
-        .from('profiles')
-        .update({'logo_path': path})
-        .eq('id', _userId);
-    return path;
+    return _replaceProfileStorageAsset(
+      bucket: 'logos',
+      column: 'logo_path',
+      path: path,
+      bytes: bytes,
+      contentType: contentType,
+    );
   }
 
   Future<String> uploadProfileSignature({required Uint8List bytes}) async {
     final version = DateTime.now().millisecondsSinceEpoch;
     final path = '$_userId/signature-$version.png';
-    await _client.storage
-        .from('signatures')
-        .uploadBinary(
-          path,
-          bytes,
-          fileOptions: const FileOptions(
-            upsert: true,
-            contentType: 'image/png',
-          ),
-        );
-    await _client
-        .from('profiles')
-        .update({'signature_path': path})
-        .eq('id', _userId);
-    return path;
+    return _replaceProfileStorageAsset(
+      bucket: 'signatures',
+      column: 'signature_path',
+      path: path,
+      bytes: bytes,
+      contentType: 'image/png',
+    );
   }
 
   Future<String> uploadProfileQr({
@@ -253,15 +240,62 @@ class SmetchikRepository {
     final column = normalizedKind == 'contact'
         ? 'contact_qr_path'
         : 'payment_qr_path';
+    return _replaceProfileStorageAsset(
+      bucket: 'qr-codes',
+      column: column,
+      path: path,
+      bytes: bytes,
+      contentType: contentType,
+    );
+  }
+
+  /// Replaces a mutable profile asset and frees its previous object only after
+  /// the profile points at the new file. Final client signatures and PDFs use
+  /// separate immutable storage paths and are deliberately never handled here.
+  Future<String> _replaceProfileStorageAsset({
+    required String bucket,
+    required String column,
+    required String path,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    final current = await _client
+        .from('profiles')
+        .select(column)
+        .eq('id', _userId)
+        .maybeSingle();
+    final previousPath = current?[column] as String?;
+
     await _client.storage
-        .from('qr-codes')
+        .from(bucket)
         .uploadBinary(
           path,
           bytes,
           fileOptions: FileOptions(upsert: true, contentType: contentType),
         );
-    await _client.from('profiles').update({column: path}).eq('id', _userId);
+    try {
+      await _client.from('profiles').update({column: path}).eq('id', _userId);
+    } catch (_) {
+      await _removeStorageObject(bucket, path);
+      rethrow;
+    }
+
+    if (previousPath != null &&
+        previousPath != path &&
+        !previousPath.startsWith('http://') &&
+        !previousPath.startsWith('https://')) {
+      await _removeStorageObject(bucket, previousPath);
+    }
     return path;
+  }
+
+  Future<void> _removeStorageObject(String bucket, String path) async {
+    try {
+      await _client.storage.from(bucket).remove([path]);
+    } catch (_) {
+      // A replacement is already persisted. A failed cleanup must not make a
+      // profile update look unsuccessful to the user.
+    }
   }
 
   Future<List<ClientModel>> fetchClients() async {
