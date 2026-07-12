@@ -991,9 +991,9 @@ class _SignatureSettingsCard extends StatelessWidget {
                 ? Image.network(
                     signatureUrl!,
                     fit: BoxFit.contain,
-                    alignment: Alignment.centerLeft,
+                    alignment: Alignment.center,
                     errorBuilder: (context, error, stackTrace) => const Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: Alignment.center,
                       child: Text(
                         'Роспись не удалось показать',
                         style: TextStyle(
@@ -1004,7 +1004,7 @@ class _SignatureSettingsCard extends StatelessWidget {
                     ),
                   )
                 : const Align(
-                    alignment: Alignment.centerLeft,
+                    alignment: Alignment.center,
                     child: Text(
                       'Пока пусто',
                       style: TextStyle(
@@ -1474,40 +1474,25 @@ class _SettingsFeatureSheet extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(26),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      SizedBox(
-                        height: 40,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: AppColors.border,
-                                borderRadius: BorderRadius.circular(99),
-                              ),
-                            ),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: IconButton(
-                                tooltip: 'Закрыть',
-                                onPressed: onClose,
-                                icon: const Icon(Icons.close),
-                              ),
-                            ),
-                          ],
+                child: Stack(
+                  children: [
+                    SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(12, 56, 12, 12),
+                      child: child,
+                    ),
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: IconButton(
+                          tooltip: 'Закрыть',
+                          onPressed: onClose,
+                          icon: const Icon(Icons.close),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      child,
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),

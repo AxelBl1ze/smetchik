@@ -394,14 +394,25 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     CatalogItemModel? item, [
     String? initialCategory,
   ]) async {
+    try {
+      await _openWorkSheet(item, initialCategory);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Не удалось открыть форму услуги. Повторите попытку.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _openWorkSheet(
+    CatalogItemModel? item,
+    String? initialCategory,
+  ) async {
     final categories = (await ref.read(catalogDataProvider.future)).categories;
     if (!mounted) return;
 
-    final title = TextEditingController(text: item?.title ?? '');
-    final unit = TextEditingController(text: item?.unit ?? 'шт');
-    final price = TextEditingController(
-      text: item == null ? '' : item.unitPrice.toStringAsFixed(0),
-    );
     var category =
         item?.category ??
         initialCategory ??
@@ -416,87 +427,37 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
     final allCategories = {...categories, category}.toList()..sort();
 
-    final saved = await showFormSheet(
+    final result = await showModalBottomSheet<_CatalogItemEditResult>(
       context: context,
-      title: item == null ? 'Новая услуга' : 'Редактировать услугу',
-      subtitle: item == null
-          ? 'Добавьте работу с ценой в прайс-лист'
-          : 'Измените название, раздел или цену',
-      fields: [
-        StatefulBuilder(
-          builder: (context, setSheetState) => Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: title,
-                autofocus: item == null,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Название',
-                  hintText: 'Монтаж радиатора',
-                ),
-              ),
-              const SizedBox(height: 12),
-              CategoryPicker(
-                categories: allCategories,
-                selected: category,
-                onSelected: (value) => setSheetState(() => category = value),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: unit,
-                      decoration: const InputDecoration(labelText: 'Ед. изм.'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: price,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Цена',
-                        suffixText: '₽',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _CatalogItemEditorSheet(
+        item: item,
+        categories: allCategories,
+        initialCategory: category,
+      ),
     );
-
-    final parsedPrice = double.tryParse(price.text.replaceAll(',', '.')) ?? 0;
-    if (saved == true && title.text.trim().isNotEmpty) {
+    if (result != null) {
       final repository = ref.read(repositoryProvider);
       if (item == null) {
         await repository.saveCatalogItem(
-          category: category,
-          title: title.text,
-          unit: unit.text.trim().isEmpty ? 'шт' : unit.text,
-          unitPrice: parsedPrice,
+          category: result.category,
+          title: result.title,
+          unit: result.unit,
+          unitPrice: result.unitPrice,
         );
       } else {
         await repository.saveCatalogItemFromExisting(
           item: item,
-          category: category,
-          title: title.text,
-          unit: unit.text.trim().isEmpty ? 'шт' : unit.text,
-          unitPrice: parsedPrice,
+          category: result.category,
+          title: result.title,
+          unit: result.unit,
+          unitPrice: result.unitPrice,
         );
       }
       await _refreshCatalog();
-      if (mounted) setState(() => _category = category);
+      if (mounted) setState(() => _category = result.category);
     }
-
-    title.dispose();
-    unit.dispose();
-    price.dispose();
   }
 
   Future<void> _deleteCategory(String category) async {
@@ -619,6 +580,191 @@ class _CategoryEditResult {
 
   final String title;
   final String iconKey;
+}
+
+class _CatalogItemEditResult {
+  const _CatalogItemEditResult({
+    required this.title,
+    required this.unit,
+    required this.unitPrice,
+    required this.category,
+  });
+
+  final String title;
+  final String unit;
+  final double unitPrice;
+  final String category;
+}
+
+class _CatalogItemEditorSheet extends StatefulWidget {
+  const _CatalogItemEditorSheet({
+    required this.item,
+    required this.categories,
+    required this.initialCategory,
+  });
+
+  final CatalogItemModel? item;
+  final List<String> categories;
+  final String initialCategory;
+
+  @override
+  State<_CatalogItemEditorSheet> createState() =>
+      _CatalogItemEditorSheetState();
+}
+
+class _CatalogItemEditorSheetState extends State<_CatalogItemEditorSheet> {
+  late final TextEditingController _title;
+  late final TextEditingController _unit;
+  late final TextEditingController _price;
+  late String _category;
+
+  @override
+  void initState() {
+    super.initState();
+    _title = TextEditingController(text: widget.item?.title ?? '');
+    _unit = TextEditingController(text: widget.item?.unit ?? 'шт');
+    _price = TextEditingController(
+      text: widget.item == null
+          ? ''
+          : widget.item!.unitPrice.toStringAsFixed(0),
+    );
+    _category = widget.initialCategory;
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _unit.dispose();
+    _price.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final isNew = widget.item == null;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Container(
+              margin: const EdgeInsets.all(10),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.16),
+                    blurRadius: 28,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _CatalogSheetTitle(
+                            icon: isNew
+                                ? Icons.add_circle_outline
+                                : Icons.edit_outlined,
+                            title: isNew
+                                ? 'Новая услуга'
+                                : 'Редактировать услугу',
+                            subtitle: isNew
+                                ? 'Работа, единица измерения и цена'
+                                : 'Название, раздел и стоимость',
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Закрыть',
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _title,
+                      autofocus: isNew,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: const InputDecoration(
+                        labelText: 'Название',
+                        hintText: 'Монтаж радиатора',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    CategoryPicker(
+                      categories: widget.categories,
+                      selected: _category,
+                      onSelected: (value) => setState(() => _category = value),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _unit,
+                            decoration: const InputDecoration(
+                              labelText: 'Ед. изм.',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 2,
+                          child: TextField(
+                            controller: _price,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Цена',
+                              suffixText: '₽',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _submit,
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(isNew ? 'Добавить услугу' : 'Сохранить'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _submit() {
+    final title = _title.text.trim();
+    if (title.isEmpty) return;
+    final unit = _unit.text.trim().isEmpty ? 'шт' : _unit.text.trim();
+    final price = double.tryParse(_price.text.replaceAll(',', '.')) ?? 0;
+    Navigator.of(context).pop(
+      _CatalogItemEditResult(
+        title: title,
+        unit: unit,
+        unitPrice: price,
+        category: _category,
+      ),
+    );
+  }
 }
 
 class _CategoryEditorSheet extends StatefulWidget {

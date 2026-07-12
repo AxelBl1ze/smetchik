@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/app_config.dart';
+import 'local_data_cache.dart';
 import 'models.dart';
 import 'signing.dart';
 
@@ -52,6 +53,7 @@ class SmetchikRepository {
   const SmetchikRepository(this._client);
 
   final SupabaseClient _client;
+  static const _localCache = LocalDataCache();
 
   String get _userId {
     final id = _client.auth.currentUser?.id;
@@ -60,12 +62,24 @@ class SmetchikRepository {
   }
 
   Future<ProfileModel?> fetchProfile() async {
-    final data = await _client
-        .from('profiles')
-        .select()
-        .eq('id', _userId)
-        .maybeSingle();
-    if (data == null) return null;
+    try {
+      final data = await _client
+          .from('profiles')
+          .select()
+          .eq('id', _userId)
+          .maybeSingle();
+      if (data == null) return null;
+      final map = Map<String, dynamic>.from(data);
+      await _localCache.write(_cacheKey('profile'), map);
+      return _profileFromMap(map);
+    } catch (_) {
+      final cached = await _localCache.readMap(_cacheKey('profile'));
+      if (cached == null) rethrow;
+      return _profileFromMap(cached);
+    }
+  }
+
+  ProfileModel _profileFromMap(Map<String, dynamic> data) {
     final profile = ProfileModel.fromMap(data);
     return profile.copyWith(
       logoUrl: logoPublicUrl(profile.logoPath),
@@ -74,6 +88,8 @@ class SmetchikRepository {
       contactQrUrl: qrPublicUrl(profile.contactQrPath),
     );
   }
+
+  String _cacheKey(String name) => 'smetchik.cache.v1.$_userId.$name';
 
   Future<void> saveProfile({
     required String fullName,
@@ -271,7 +287,11 @@ class SmetchikRepository {
         .uploadBinary(
           path,
           bytes,
-          fileOptions: FileOptions(upsert: true, contentType: contentType),
+          fileOptions: FileOptions(
+            upsert: true,
+            contentType: contentType,
+            cacheControl: '31536000',
+          ),
         );
     try {
       await _client.from('profiles').update({column: path}).eq('id', _userId);
@@ -299,12 +319,20 @@ class SmetchikRepository {
   }
 
   Future<List<ClientModel>> fetchClients() async {
-    final rows = await _client
-        .from('clients')
-        .select()
-        .eq('user_id', _userId)
-        .order('created_at', ascending: false);
-    return rows.map((row) => ClientModel.fromMap(row)).toList();
+    try {
+      final rows = await _client
+          .from('clients')
+          .select()
+          .eq('user_id', _userId)
+          .order('created_at', ascending: false);
+      final maps = _asMaps(rows);
+      await _localCache.write(_cacheKey('clients'), maps);
+      return maps.map(ClientModel.fromMap).toList();
+    } catch (_) {
+      final cached = await _localCache.readList(_cacheKey('clients'));
+      if (cached == null) rethrow;
+      return cached.map(ClientModel.fromMap).toList();
+    }
   }
 
   Future<ClientModel> saveClient({
@@ -363,6 +391,22 @@ class SmetchikRepository {
   }
 
   Future<CatalogData> fetchCatalogData() async {
+    try {
+      final data = await _fetchCatalogDataRemote();
+      await _localCache.write(_cacheKey('catalog'), {
+        'items': [for (final item in data.items) _catalogItemToMap(item)],
+        'categories': data.categories,
+        'category_icons': data.categoryIcons,
+      });
+      return data;
+    } catch (_) {
+      final cached = await _localCache.readMap(_cacheKey('catalog'));
+      if (cached == null) rethrow;
+      return _catalogDataFromCache(cached);
+    }
+  }
+
+  Future<CatalogData> _fetchCatalogDataRemote() async {
     final results = await Future.wait<dynamic>([
       _fetchHiddenCatalogCategories(),
       _fetchHiddenCatalogItemKeys(),
@@ -434,6 +478,39 @@ class SmetchikRepository {
       categoryIcons: categoryIcons,
     );
   }
+
+  CatalogData _catalogDataFromCache(Map<String, dynamic> cached) {
+    final itemRows = cached['items'];
+    final categoryRows = cached['categories'];
+    final iconRows = cached['category_icons'];
+    return CatalogData(
+      items: itemRows is List
+          ? itemRows
+                .whereType<Map>()
+                .map(
+                  (row) =>
+                      CatalogItemModel.fromMap(Map<String, dynamic>.from(row)),
+                )
+                .toList()
+          : const [],
+      categories: categoryRows is List
+          ? categoryRows.whereType<String>().toList()
+          : const [],
+      categoryIcons: iconRows is Map
+          ? iconRows.map((key, value) => MapEntry('$key', '$value'))
+          : const {},
+    );
+  }
+
+  Map<String, dynamic> _catalogItemToMap(CatalogItemModel item) => {
+    'id': item.id,
+    'user_id': item.userId,
+    'category': item.category,
+    'title': item.title,
+    'unit': item.unit,
+    'unit_price': item.unitPrice,
+    'is_custom': item.isCustom,
+  };
 
   Future<List<CatalogItemModel>> fetchCatalogItems() async {
     return (await fetchCatalogData()).items;
@@ -651,11 +728,23 @@ class SmetchikRepository {
   }
 
   Future<List<EstimateModel>> fetchEstimates() async {
-    final rows = await _client
-        .from('estimates')
-        .select('*, clients(*)')
-        .eq('user_id', _userId)
-        .order('created_at', ascending: false);
+    try {
+      final rows = await _client
+          .from('estimates')
+          .select('*, clients(*)')
+          .eq('user_id', _userId)
+          .order('created_at', ascending: false);
+      final maps = _asMaps(rows);
+      await _localCache.write(_cacheKey('estimates'), maps);
+      return _estimateModelsFromMaps(maps);
+    } catch (_) {
+      final cached = await _localCache.readList(_cacheKey('estimates'));
+      if (cached == null) rethrow;
+      return _estimateModelsFromMaps(cached);
+    }
+  }
+
+  List<EstimateModel> _estimateModelsFromMaps(List<Map<String, dynamic>> rows) {
     return rows.map((row) {
       final estimate = EstimateModel.fromMap(row);
       return estimate.copyWith(
@@ -667,18 +756,40 @@ class SmetchikRepository {
   }
 
   Future<EstimateDetail> fetchEstimateDetail(String id) async {
-    final estimateRow = await _client
-        .from('estimates')
-        .select('*, clients(*)')
-        .eq('id', id)
-        .eq('user_id', _userId)
-        .single();
-    final lineRows = await _client
-        .from('estimate_lines')
-        .select()
-        .eq('estimate_id', id)
-        .eq('user_id', _userId)
-        .order('sort_order');
+    try {
+      final estimateRow = await _client
+          .from('estimates')
+          .select('*, clients(*)')
+          .eq('id', id)
+          .eq('user_id', _userId)
+          .single();
+      final lineRows = await _client
+          .from('estimate_lines')
+          .select()
+          .eq('estimate_id', id)
+          .eq('user_id', _userId)
+          .order('sort_order');
+      final data = {
+        'estimate': Map<String, dynamic>.from(estimateRow),
+        'lines': _asMaps(lineRows),
+      };
+      await _localCache.write(_cacheKey('estimate.$id'), data);
+      return _estimateDetailFromCache(data);
+    } catch (_) {
+      final cached = await _localCache.readMap(_cacheKey('estimate.$id'));
+      if (cached == null) rethrow;
+      return _estimateDetailFromCache(cached);
+    }
+  }
+
+  EstimateDetail _estimateDetailFromCache(Map<String, dynamic> data) {
+    final estimateRow = Map<String, dynamic>.from(data['estimate'] as Map);
+    final lineRows = data['lines'] is List
+        ? (data['lines'] as List)
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList()
+        : const <Map<String, dynamic>>[];
     final estimate = EstimateModel.fromMap(estimateRow);
     return EstimateDetail(
       estimate: estimate.copyWith(
@@ -1005,6 +1116,10 @@ class SmetchikRepository {
     final trimmed = value?.trim();
     if (trimmed == null || trimmed.isEmpty) return null;
     return trimmed;
+  }
+
+  static List<Map<String, dynamic>> _asMaps(Iterable<dynamic> rows) {
+    return rows.map((row) => Map<String, dynamic>.from(row as Map)).toList();
   }
 
   static String _normalizeRussianPhone(String? value) {
