@@ -13,4 +13,13 @@ export PATH="$FLUTTER_HOME/bin:$PATH"
 flutter --version
 flutter config --enable-web
 flutter pub get
-flutter build web --release
+
+build_args=(--release)
+for variable in SUPABASE_URL SUPABASE_ANON_KEY PUBLIC_APP_URL; do
+  value="${!variable:-}"
+  if [[ -n "$value" ]]; then
+    build_args+=("--dart-define=$variable=$value")
+  fi
+done
+
+flutter build web "${build_args[@]}"

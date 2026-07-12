@@ -10,13 +10,17 @@ Supabase dev-проект уже прописан в `lib/src/core/app_config.da
 flutter run -d chrome
 ```
 
-Для QR-подписания укажите публичный адрес веб-версии при сборке нативных
-приложений. Для текущего Cloudflare Workers адрес уже является значением по
-умолчанию, но при смене домена его нужно переопределить:
+Для QR-подписания укажите публичный адрес веб-версии при сборке. Адрес
+Cloudflare Pages `https://smetchik.pages.dev` уже является значением по
+умолчанию, а при подключении собственного домена его можно переопределить:
 
 ```bash
 --dart-define=PUBLIC_APP_URL=https://YOUR_PUBLIC_APP_URL
 ```
+
+В Cloudflare Pages переменная `PUBLIC_APP_URL` задаётся в `Settings →
+Environment variables`; `scripts/cloudflare_build.sh` передаёт её в Flutter
+при каждой автоматической сборке из GitHub.
 
 Для запуска с другим Supabase-проектом можно переопределить параметры через `dart-define`:
 

@@ -14,7 +14,7 @@ class AppConfig {
 
   static const publicAppUrl = String.fromEnvironment(
     'PUBLIC_APP_URL',
-    defaultValue: 'https://smetchik.mcreeper76.workers.dev',
+    defaultValue: 'https://smetchik.pages.dev',
   );
 
   static String estimateApprovalUrl(String token) {
