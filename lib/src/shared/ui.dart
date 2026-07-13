@@ -107,6 +107,244 @@ class SectionHeader extends StatelessWidget {
   }
 }
 
+class FilterPickerOption {
+  const FilterPickerOption({
+    required this.value,
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.background,
+  });
+
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color color;
+  final Color background;
+}
+
+/// Compact, consistent status filtering for long work lists.
+class FilterPickerField extends StatelessWidget {
+  const FilterPickerField({
+    super.key,
+    required this.title,
+    required this.options,
+    required this.selectedValue,
+    required this.onChanged,
+  });
+
+  final String title;
+  final List<FilterPickerOption> options;
+  final String selectedValue;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = options.firstWhere(
+      (option) => option.value == selectedValue,
+      orElse: () => options.first,
+    );
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () async {
+          final value = await showModalBottomSheet<String>(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => _FilterPickerSheet(
+              title: title,
+              options: options,
+              selectedValue: selectedValue,
+            ),
+          );
+          if (value != null) onChanged(value);
+        },
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 56),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: selected.background,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(selected.icon, color: selected.color, size: 19),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppColors.textHint,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      selected.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: AppColors.textSecondary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterPickerSheet extends StatelessWidget {
+  const _FilterPickerSheet({
+    required this.title,
+    required this.options,
+    required this.selectedValue,
+  });
+
+  final String title;
+  final List<FilterPickerOption> options;
+  final String selectedValue;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.72;
+    return SafeArea(
+      top: false,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Container(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            margin: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Закрыть',
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  for (final option in options) ...[
+                    _FilterPickerOption(
+                      option: option,
+                      selected: option.value == selectedValue,
+                      onTap: () => Navigator.of(context).pop(option.value),
+                    ),
+                    if (option != options.last) const SizedBox(height: 8),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterPickerOption extends StatelessWidget {
+  const _FilterPickerOption({
+    required this.option,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final FilterPickerOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? option.background : AppColors.background,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: selected ? Colors.white : option.background,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(option.icon, color: option.color),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  option.label,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check_circle, color: option.color)
+              else
+                const Icon(Icons.chevron_right, color: AppColors.textHint),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ScreenTitle extends StatelessWidget {
   const ScreenTitle({
     super.key,

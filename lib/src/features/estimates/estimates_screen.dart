@@ -56,30 +56,12 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<_EstimateWorkspace>(
-                  segments: const [
-                    ButtonSegment(
-                      value: _EstimateWorkspace.estimates,
-                      icon: Icon(Icons.receipt_long_outlined),
-                      label: Text('Сметы'),
-                    ),
-                    ButtonSegment(
-                      value: _EstimateWorkspace.projects,
-                      icon: Icon(Icons.domain_outlined),
-                      label: Text('Объекты'),
-                    ),
-                  ],
-                  selected: {workspace},
-                  onSelectionChanged: (value) => context.go(
-                    value.first == _EstimateWorkspace.projects
-                        ? '/estimates?tab=projects'
-                        : '/estimates',
-                  ),
-                ),
+            child: _WorkspaceSwitcher(
+              selected: workspace,
+              onSelected: (value) => context.go(
+                value == _EstimateWorkspace.projects
+                    ? '/estimates?tab=projects'
+                    : '/estimates',
               ),
             ),
           ),
@@ -111,27 +93,11 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
                               : const [],
                         ),
                         const SizedBox(height: 14),
-                        _EstimatesSearchField(onChanged: _setQuery),
-                        const SizedBox(height: 10),
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _filterChip('all', 'Все'),
-                              _filterChip(EstimateStatus.draft, 'Черновики'),
-                              _filterChip(EstimateStatus.sent, 'Отправлены'),
-                              _filterChip(EstimateStatus.accepted, 'Приняты'),
-                              _filterChip(
-                                EstimateStatus.inProgress,
-                                'В работе',
-                              ),
-                              _filterChip(
-                                EstimateStatus.completed,
-                                'Завершены',
-                              ),
-                              _filterChip(EstimateStatus.declined, 'Отклонены'),
-                            ],
-                          ),
+                        _EstimateFilters(
+                          status: _status,
+                          onQueryChanged: _setQuery,
+                          onStatusChanged: (value) =>
+                              setState(() => _status = value),
                         ),
                         const SizedBox(height: 12),
                         estimates.when(
@@ -181,19 +147,200 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
     );
   }
 
-  Widget _filterChip(String value, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: ChoiceChip(
-        selected: _status == value,
-        label: Text(label),
-        onSelected: (_) => setState(() => _status = value),
+  void _setQuery(String value) {
+    setState(() => _query = value.trim().toLowerCase());
+  }
+}
+
+class _WorkspaceSwitcher extends StatelessWidget {
+  const _WorkspaceSwitcher({required this.selected, required this.onSelected});
+
+  final _EstimateWorkspace selected;
+  final ValueChanged<_EstimateWorkspace> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 410),
+        child: Container(
+          height: 56,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(17),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              _WorkspaceSwitchOption(
+                selected: selected == _EstimateWorkspace.estimates,
+                icon: Icons.receipt_long_outlined,
+                label: 'Сметы',
+                onTap: () => onSelected(_EstimateWorkspace.estimates),
+              ),
+              const SizedBox(width: 4),
+              _WorkspaceSwitchOption(
+                selected: selected == _EstimateWorkspace.projects,
+                icon: Icons.domain_outlined,
+                label: 'Объекты',
+                onTap: () => onSelected(_EstimateWorkspace.projects),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
 
-  void _setQuery(String value) {
-    setState(() => _query = value.trim().toLowerCase());
+class _WorkspaceSwitchOption extends StatelessWidget {
+  const _WorkspaceSwitchOption({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(13),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(13),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            decoration: BoxDecoration(
+              color: selected ? AppColors.graphite : Colors.transparent,
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: selected ? AppColors.orange : AppColors.textSecondary,
+                ),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : AppColors.textSecondary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EstimateFilters extends StatelessWidget {
+  const _EstimateFilters({
+    required this.status,
+    required this.onQueryChanged,
+    required this.onStatusChanged,
+  });
+
+  final String status;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<String> onStatusChanged;
+
+  static const _options = [
+    FilterPickerOption(
+      value: 'all',
+      label: 'Все сметы',
+      icon: Icons.filter_list_rounded,
+      color: AppColors.textSecondary,
+      background: AppColors.background,
+    ),
+    FilterPickerOption(
+      value: EstimateStatus.draft,
+      label: 'Черновики',
+      icon: Icons.edit_outlined,
+      color: AppColors.textSecondary,
+      background: AppColors.background,
+    ),
+    FilterPickerOption(
+      value: EstimateStatus.sent,
+      label: 'Отправлены',
+      icon: Icons.send_outlined,
+      color: AppColors.info,
+      background: AppColors.infoBg,
+    ),
+    FilterPickerOption(
+      value: EstimateStatus.accepted,
+      label: 'Приняты',
+      icon: Icons.thumb_up_alt_outlined,
+      color: AppColors.orangeDark,
+      background: AppColors.orangeLight,
+    ),
+    FilterPickerOption(
+      value: EstimateStatus.inProgress,
+      label: 'В работе',
+      icon: Icons.handyman_outlined,
+      color: AppColors.success,
+      background: AppColors.successBg,
+    ),
+    FilterPickerOption(
+      value: EstimateStatus.completed,
+      label: 'Завершены',
+      icon: Icons.done_all_outlined,
+      color: AppColors.success,
+      background: AppColors.successBg,
+    ),
+    FilterPickerOption(
+      value: EstimateStatus.declined,
+      label: 'Отклонены',
+      icon: Icons.close_rounded,
+      color: AppColors.danger,
+      background: AppColors.dangerBg,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final filter = FilterPickerField(
+          title: 'Статус сметы',
+          options: _options,
+          selectedValue: status,
+          onChanged: onStatusChanged,
+        );
+        if (constraints.maxWidth >= 620) {
+          return Row(
+            children: [
+              Expanded(child: _EstimatesSearchField(onChanged: onQueryChanged)),
+              const SizedBox(width: 10),
+              SizedBox(width: 230, child: filter),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _EstimatesSearchField(onChanged: onQueryChanged),
+            const SizedBox(height: 10),
+            filter,
+          ],
+        );
+      },
+    );
   }
 }
 

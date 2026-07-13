@@ -60,4 +60,43 @@ void main() {
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+
+  testWidgets('dismisses the tariff sheet by dragging its fixed header', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          profileProvider.overrideWith(
+            (_) async => const ProfileModel(
+              id: 'user-id',
+              fullName: 'Илья',
+              currency: 'RUB',
+            ),
+          ),
+          estimatesProvider.overrideWith((_) async => const <EstimateModel>[]),
+        ],
+        child: const MaterialApp(home: SettingsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Базовый').first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tariff-sheet-drag-handle')), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('tariff-sheet-drag-handle')),
+      const Offset(0, 360),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('tariff-sheet-drag-handle')), findsNothing);
+  });
 }

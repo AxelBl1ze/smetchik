@@ -525,6 +525,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _TariffSheet(
         currentPlan:
@@ -4014,57 +4016,151 @@ class _TariffSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+    final maxContentHeight = MediaQuery.sizeOf(context).height * 0.68;
+    return SafeArea(
+      top: false,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(99),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 8, 8),
+                  child: Column(
+                    children: [
+                      const Center(child: _TariffSheetDragHandle()),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Container(
+                            width: 42,
+                            height: 42,
+                            decoration: BoxDecoration(
+                              color: AppColors.graphite,
+                              borderRadius: BorderRadius.circular(13),
+                            ),
+                            child: const Icon(
+                              Icons.workspace_premium,
+                              color: AppColors.orange,
+                            ),
+                          ),
+                          const SizedBox(width: 11),
+                          const Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Тарифы',
+                                  style: TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Выберите план под объём работы',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Закрыть',
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxContentHeight),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final plan in SubscriptionPlan.values) ...[
+                          _TariffPlanCard(
+                            plan: plan,
+                            selected:
+                                SubscriptionPlan.normalize(currentPlan) ==
+                                SubscriptionPlan.normalize(plan),
+                            onSelect: () => onSelect(plan),
+                          ),
+                          if (plan != SubscriptionPlan.values.last)
+                            const SizedBox(height: 10),
+                        ],
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 18),
-                Text(
-                  'Тарифы',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Выберите план под объём работы',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 14),
-                for (final plan in SubscriptionPlan.values) ...[
-                  _TariffPlanCard(
-                    plan: plan,
-                    selected:
-                        SubscriptionPlan.normalize(currentPlan) ==
-                        SubscriptionPlan.normalize(plan),
-                    onSelect: () => onSelect(plan),
-                  ),
-                  if (plan != SubscriptionPlan.values.last)
-                    const SizedBox(height: 10),
-                ],
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TariffSheetDragHandle extends StatefulWidget {
+  const _TariffSheetDragHandle();
+
+  @override
+  State<_TariffSheetDragHandle> createState() => _TariffSheetDragHandleState();
+}
+
+class _TariffSheetDragHandleState extends State<_TariffSheetDragHandle> {
+  double _dragDistance = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      key: const Key('tariff-sheet-drag-handle'),
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragStart: (_) => _dragDistance = 0,
+      onVerticalDragUpdate: (details) {
+        if (details.delta.dy > 0) _dragDistance += details.delta.dy;
+      },
+      onVerticalDragEnd: (details) {
+        final velocity = details.primaryVelocity ?? 0;
+        if (_dragDistance > 36 || velocity > 300) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: SizedBox(
+        width: 84,
+        height: 22,
+        child: Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(99),
             ),
           ),
         ),

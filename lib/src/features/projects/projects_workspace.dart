@@ -49,23 +49,12 @@ class _ProjectsWorkspaceState extends ConsumerState<ProjectsWorkspace> {
                 : const [],
           ),
           const SizedBox(height: 14),
-          _ProjectSearchField(
-            onChanged: (value) {
+          _ProjectFilters(
+            status: _status,
+            onQueryChanged: (value) {
               setState(() => _query = value.trim().toLowerCase());
             },
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _statusChip('all', 'Все'),
-                _statusChip(ProjectStatus.planning, 'План'),
-                _statusChip(ProjectStatus.active, 'Строятся'),
-                _statusChip(ProjectStatus.completed, 'Готовы'),
-                _statusChip(ProjectStatus.sold, 'Проданы'),
-              ],
-            ),
+            onStatusChanged: (value) => setState(() => _status = value),
           ),
           const SizedBox(height: 12),
           profile.when(
@@ -130,17 +119,6 @@ class _ProjectsWorkspaceState extends ConsumerState<ProjectsWorkspace> {
     );
   }
 
-  Widget _statusChip(String value, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: ChoiceChip(
-        selected: _status == value,
-        label: Text(label),
-        onSelected: (_) => setState(() => _status = value),
-      ),
-    );
-  }
-
   void _openProject(
     AsyncValue<ProfileModel?> profile,
     AsyncValue<List<ProjectModel>> projects,
@@ -175,6 +153,87 @@ class _ProjectSearchField extends StatelessWidget {
         hintText: 'Поиск по объекту, адресу или заказчику',
         prefixIcon: Icon(Icons.search),
       ),
+    );
+  }
+}
+
+class _ProjectFilters extends StatelessWidget {
+  const _ProjectFilters({
+    required this.status,
+    required this.onQueryChanged,
+    required this.onStatusChanged,
+  });
+
+  final String status;
+  final ValueChanged<String> onQueryChanged;
+  final ValueChanged<String> onStatusChanged;
+
+  static const _options = [
+    FilterPickerOption(
+      value: 'all',
+      label: 'Все объекты',
+      icon: Icons.filter_list_rounded,
+      color: AppColors.textSecondary,
+      background: AppColors.background,
+    ),
+    FilterPickerOption(
+      value: ProjectStatus.planning,
+      label: 'Планируются',
+      icon: Icons.event_note_outlined,
+      color: AppColors.info,
+      background: AppColors.infoBg,
+    ),
+    FilterPickerOption(
+      value: ProjectStatus.active,
+      label: 'Строятся',
+      icon: Icons.construction_outlined,
+      color: AppColors.orangeDark,
+      background: AppColors.orangeLight,
+    ),
+    FilterPickerOption(
+      value: ProjectStatus.completed,
+      label: 'Завершены',
+      icon: Icons.task_alt_outlined,
+      color: AppColors.success,
+      background: AppColors.successBg,
+    ),
+    FilterPickerOption(
+      value: ProjectStatus.sold,
+      label: 'Проданы',
+      icon: Icons.home_work_outlined,
+      color: AppColors.success,
+      background: AppColors.successBg,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final filter = FilterPickerField(
+          title: 'Статус объекта',
+          options: _options,
+          selectedValue: status,
+          onChanged: onStatusChanged,
+        );
+        if (constraints.maxWidth >= 620) {
+          return Row(
+            children: [
+              Expanded(child: _ProjectSearchField(onChanged: onQueryChanged)),
+              const SizedBox(width: 10),
+              SizedBox(width: 230, child: filter),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ProjectSearchField(onChanged: onQueryChanged),
+            const SizedBox(height: 10),
+            filter,
+          ],
+        );
+      },
     );
   }
 }
