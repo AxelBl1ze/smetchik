@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models.dart';
+import '../../data/offline_sync_service.dart';
 import '../../data/repository.dart';
 import '../../shared/address_autocomplete_field.dart';
 import '../../shared/smetchik_date_picker.dart';
@@ -11,9 +12,10 @@ import '../../shared/upgrade_sheet.dart';
 import 'project_status_widgets.dart';
 
 class ProjectFormScreen extends ConsumerStatefulWidget {
-  const ProjectFormScreen({super.key, this.projectId});
+  const ProjectFormScreen({super.key, this.projectId, this.offlineDraftId});
 
   final String? projectId;
+  final String? offlineDraftId;
 
   @override
   ConsumerState<ProjectFormScreen> createState() => _ProjectFormScreenState();
@@ -33,6 +35,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
   bool _saving = false;
 
   bool get _isEditing => widget.projectId != null;
+  bool get _isOfflineDraft => widget.offlineDraftId != null;
 
   @override
   void dispose() {
@@ -49,12 +52,29 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
     final detail = widget.projectId == null
         ? null
         : ref.watch(projectDetailProvider(widget.projectId!));
+    final offlineSync = ref.watch(offlineSyncProvider);
     detail?.whenData((value) {
       if (!_hydrated) _hydrate(value.project);
     });
+    if (_isOfflineDraft && !_hydrated && offlineSync.isReady) {
+      final entry = offlineSync.entries
+          .where((item) => item.id == widget.offlineDraftId)
+          .firstOrNull;
+      if (entry != null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _hydrateOffline(entry.projectDraft),
+        );
+      }
+    }
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isEditing ? 'Редактировать объект' : 'Новый объект'),
+        title: Text(
+          _isOfflineDraft
+              ? 'Черновик на устройстве'
+              : _isEditing
+              ? 'Редактировать объект'
+              : 'Новый объект',
+        ),
         actions: [
           TextButton(
             onPressed: _saving ? null : _save,
@@ -179,26 +199,53 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
     _status = project.status;
   }
 
+  void _hydrateOffline(ProjectDraft draft) {
+    if (!mounted || _hydrated) return;
+    setState(() {
+      _hydrated = true;
+      _title.text = draft.title;
+      _address.text = draft.objectAddress ?? '';
+      _customer.text = draft.customerName ?? '';
+      _revenue.text = draft.plannedRevenue == 0
+          ? ''
+          : draft.plannedRevenue.toStringAsFixed(0);
+      _notes.text = draft.notes ?? '';
+      _startDate = draft.startDate;
+      _targetDate = draft.targetDate;
+      _status = draft.status;
+    });
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
+    final draft = ProjectDraft(
+      title: _title.text,
+      objectAddress: _address.text,
+      customerName: _customer.text,
+      plannedRevenue: double.tryParse(_revenue.text.replaceAll(',', '.')) ?? 0,
+      startDate: _startDate,
+      targetDate: _targetDate,
+      status: _status,
+      notes: _notes.text,
+    );
     try {
+      if (_isOfflineDraft) {
+        await ref
+            .read(offlineSyncProvider)
+            .queueProject(draft, id: widget.offlineDraftId);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Черновик объекта сохранён и ждёт синхронизации'),
+          ),
+        );
+        context.go('/estimates?tab=projects');
+        return;
+      }
       final id = await ref
           .read(repositoryProvider)
-          .saveProject(
-            ProjectDraft(
-              title: _title.text,
-              objectAddress: _address.text,
-              customerName: _customer.text,
-              plannedRevenue:
-                  double.tryParse(_revenue.text.replaceAll(',', '.')) ?? 0,
-              startDate: _startDate,
-              targetDate: _targetDate,
-              status: _status,
-              notes: _notes.text,
-            ),
-            projectId: widget.projectId,
-          );
+          .saveProject(draft, projectId: widget.projectId);
       ref.invalidate(projectsProvider);
       ref.invalidate(projectDetailProvider(id));
       if (!mounted) return;
@@ -213,9 +260,20 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
           onOpenPlans: () => context.go('/settings'),
         );
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(message)));
+        if (!_isEditing && isRecoverableNetworkError(error)) {
+          await ref.read(offlineSyncProvider).queueProject(draft);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Нет связи: объект сохранён на устройстве'),
+            ),
+          );
+          context.go('/estimates?tab=projects');
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
+        }
       }
     } finally {
       if (mounted) setState(() => _saving = false);

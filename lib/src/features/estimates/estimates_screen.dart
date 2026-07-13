@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
+import '../../data/offline_sync_service.dart';
 import '../../data/repository.dart';
+import '../../shared/offline_drafts_card.dart';
 import '../projects/projects_workspace.dart';
 import '../../shared/ui.dart';
 
@@ -24,6 +26,7 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
   @override
   Widget build(BuildContext context) {
     final estimates = ref.watch(estimatesProvider);
+    final offlineSync = ref.watch(offlineSyncProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= 840;
     final workspace =
         GoRouterState.of(context).uri.queryParameters['tab'] == 'projects'
@@ -92,6 +95,16 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
                                 ]
                               : const [],
                         ),
+                        if (offlineSync.estimateEntries.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          OfflineDraftsCard(
+                            kind: OfflineDraftKind.estimate,
+                            entries: offlineSync.estimateEntries,
+                            syncing: offlineSync.isSyncing,
+                            onRetry: offlineSync.retryNow,
+                            onDiscard: offlineSync.remove,
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         _EstimateFilters(
                           status: _status,

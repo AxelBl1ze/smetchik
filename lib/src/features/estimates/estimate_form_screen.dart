@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
+import '../../data/offline_sync_service.dart';
 import '../../data/repository.dart';
 import '../../shared/address_autocomplete_field.dart';
 import '../../shared/russian_phone_input_formatter.dart';
@@ -16,10 +17,12 @@ class EstimateFormScreen extends ConsumerStatefulWidget {
   const EstimateFormScreen({
     super.key,
     this.estimateId,
+    this.offlineDraftId,
     this.createRevision = false,
   });
 
   final String? estimateId;
+  final String? offlineDraftId;
   final bool createRevision;
 
   @override
@@ -41,6 +44,7 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
 
   bool get _isEdit => widget.estimateId != null;
   bool get _isRevision => widget.createRevision && _isEdit;
+  bool get _isOfflineDraft => widget.offlineDraftId != null;
   double get _total => _lines.fold(0, (sum, line) => sum + line.lineTotal);
 
   @override
@@ -57,6 +61,7 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
     final clients = ref.watch(clientsProvider);
     final profile = ref.watch(profileProvider);
     final estimates = ref.watch(estimatesProvider);
+    final offlineSync = ref.watch(offlineSyncProvider);
     final detail = widget.estimateId == null
         ? null
         : ref.watch(estimateDetailProvider(widget.estimateId!));
@@ -68,11 +73,23 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
         }
       });
     }
+    if (_isOfflineDraft && !_hydrated && offlineSync.isReady) {
+      final entry = offlineSync.entries
+          .where((item) => item.id == widget.offlineDraftId)
+          .firstOrNull;
+      if (entry != null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _hydrateOffline(entry.estimateDraft),
+        );
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _isRevision
+          _isOfflineDraft
+              ? 'Черновик на устройстве'
+              : _isRevision
               ? 'Новая версия сметы'
               : _isEdit
               ? 'Редактировать смету'
@@ -315,6 +332,24 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
     });
   }
 
+  void _hydrateOffline(EstimateDraft draft) {
+    if (!mounted || _hydrated) return;
+    setState(() {
+      _hydrated = true;
+      _object.text = draft.objectTitle;
+      _clientId = draft.clientId;
+      _clientName.text = draft.clientName;
+      _clientPhone.text = RussianPhoneInputFormatter.format(
+        draft.clientPhone ?? '',
+      );
+      _duration.text = draft.durationDays?.toString() ?? '';
+      _date = draft.estimateDate;
+      _lines
+        ..clear()
+        ..addAll(draft.lines);
+    });
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -448,19 +483,35 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
       return;
     }
     setState(() => _saving = true);
+    final draft = EstimateDraft(
+      objectTitle: _object.text,
+      clientId: _clientId,
+      clientName: _clientName.text,
+      clientPhone: _clientPhone.text,
+      estimateDate: _date,
+      durationDays: int.tryParse(_duration.text),
+      lines: _lines,
+    );
     try {
+      if (_isOfflineDraft) {
+        await ref
+            .read(offlineSyncProvider)
+            .queueEstimate(draft, id: widget.offlineDraftId);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Черновик сохранён на устройстве и ждёт синхронизации',
+            ),
+          ),
+        );
+        context.go('/estimates');
+        return;
+      }
       final id = await ref
           .read(repositoryProvider)
           .saveEstimateDraft(
-            EstimateDraft(
-              objectTitle: _object.text,
-              clientId: _clientId,
-              clientName: _clientName.text,
-              clientPhone: _clientPhone.text,
-              estimateDate: _date,
-              durationDays: int.tryParse(_duration.text),
-              lines: _lines,
-            ),
+            draft,
             estimateId: _isRevision ? null : widget.estimateId,
             revisionOf: _isRevision ? widget.estimateId : null,
             documentVersion: _isRevision ? _sourceDocumentVersion + 1 : null,
@@ -474,6 +525,17 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
       if (!mounted) return;
       if (_isUpgradeError(error)) {
         _showUpgradeDialog(error.toString());
+        return;
+      }
+      if (!_isEdit && isRecoverableNetworkError(error)) {
+        await ref.read(offlineSyncProvider).queueEstimate(draft);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Нет связи: черновик сохранён на устройстве'),
+          ),
+        );
+        context.go('/estimates');
         return;
       }
       ScaffoldMessenger.of(

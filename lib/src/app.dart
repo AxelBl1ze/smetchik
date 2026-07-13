@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'core/app_config.dart';
 import 'core/app_theme.dart';
 import 'core/auth_controller.dart';
+import 'data/offline_sync_service.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/catalog/catalog_screen.dart';
 import 'features/clients/client_form_screen.dart';
@@ -20,6 +23,7 @@ import 'features/projects/project_detail_screen.dart';
 import 'features/projects/project_form_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'shared/app_shell.dart';
+import 'shared/keyboard_dismiss_on_tap.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final auth = ref.read(authControllerProvider);
@@ -140,6 +144,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             _page(state, const EstimateFormScreen()),
       ),
       GoRoute(
+        path: '/estimate/offline/:id',
+        pageBuilder: (context, state) => _page(
+          state,
+          EstimateFormScreen(offlineDraftId: state.pathParameters['id']),
+        ),
+      ),
+      GoRoute(
         path: '/estimate/:id/edit',
         pageBuilder: (context, state) => _page(
           state,
@@ -160,6 +171,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/projects/new',
         pageBuilder: (context, state) =>
             _page(state, const ProjectFormScreen()),
+      ),
+      GoRoute(
+        path: '/projects/offline/:id',
+        pageBuilder: (context, state) => _page(
+          state,
+          ProjectFormScreen(offlineDraftId: state.pathParameters['id']),
+        ),
       ),
       GoRoute(
         path: '/projects/:id/edit',
@@ -186,12 +204,19 @@ class SmetchikApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authControllerProvider);
+    if (auth.isLoggedIn) {
+      final offlineSync = ref.watch(offlineSyncProvider);
+      unawaited(offlineSync.ensureLoaded());
+    }
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
       title: 'Сметчик',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
       routerConfig: router,
+      builder: (context, child) =>
+          KeyboardDismissOnTap(child: child ?? const SizedBox.shrink()),
     );
   }
 }

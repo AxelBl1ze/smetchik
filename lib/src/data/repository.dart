@@ -736,54 +736,84 @@ class SmetchikRepository {
   }
 
   Future<List<ProjectModel>> fetchProjects() async {
-    final rows = await _client
-        .from('projects')
-        .select()
-        .eq('user_id', _userId)
-        .order('updated_at', ascending: false);
-    final transactionRows = await _client
-        .from('project_transactions')
-        .select('project_id, transaction_type, amount')
-        .eq('user_id', _userId);
-    final incomeByProject = <String, double>{};
-    final expenseByProject = <String, double>{};
-    for (final row in transactionRows) {
-      final projectId = row['project_id'] as String?;
-      if (projectId == null) continue;
-      final amount = asDouble(row['amount']);
-      if (ProjectTransactionType.normalize(
-            row['transaction_type'] as String?,
-          ) ==
-          ProjectTransactionType.income) {
-        incomeByProject[projectId] = (incomeByProject[projectId] ?? 0) + amount;
-      } else {
-        expenseByProject[projectId] =
-            (expenseByProject[projectId] ?? 0) + amount;
+    try {
+      final rows = await _client
+          .from('projects')
+          .select()
+          .eq('user_id', _userId)
+          .order('updated_at', ascending: false);
+      final transactionRows = await _client
+          .from('project_transactions')
+          .select('project_id, transaction_type, amount')
+          .eq('user_id', _userId);
+      final incomeByProject = <String, double>{};
+      final expenseByProject = <String, double>{};
+      for (final row in transactionRows) {
+        final projectId = row['project_id'] as String?;
+        if (projectId == null) continue;
+        final amount = asDouble(row['amount']);
+        if (ProjectTransactionType.normalize(
+              row['transaction_type'] as String?,
+            ) ==
+            ProjectTransactionType.income) {
+          incomeByProject[projectId] =
+              (incomeByProject[projectId] ?? 0) + amount;
+        } else {
+          expenseByProject[projectId] =
+              (expenseByProject[projectId] ?? 0) + amount;
+        }
       }
+      final cached = rows.map((row) {
+        final map = Map<String, dynamic>.from(row);
+        final id = map['id'] as String?;
+        map['income_amount'] = id == null ? 0 : incomeByProject[id] ?? 0;
+        map['expense_amount'] = id == null ? 0 : expenseByProject[id] ?? 0;
+        return map;
+      }).toList();
+      await _localCache.write(_cacheKey('projects'), cached);
+      return cached.map(ProjectModel.fromMap).toList();
+    } catch (_) {
+      final cached = await _localCache.readList(_cacheKey('projects'));
+      if (cached == null) rethrow;
+      return cached.map(ProjectModel.fromMap).toList();
     }
-    return rows.map((row) {
-      final project = ProjectModel.fromMap(row);
-      return project.copyWith(
-        incomeAmount: incomeByProject[project.id] ?? 0,
-        expenseAmount: expenseByProject[project.id] ?? 0,
-      );
-    }).toList();
   }
 
   Future<ProjectDetail> fetchProjectDetail(String projectId) async {
-    final projectRow = await _client
-        .from('projects')
-        .select()
-        .eq('id', projectId)
-        .eq('user_id', _userId)
-        .single();
-    final transactionRows = await _client
-        .from('project_transactions')
-        .select()
-        .eq('project_id', projectId)
-        .eq('user_id', _userId)
-        .order('transaction_date', ascending: false)
-        .order('created_at', ascending: false);
+    try {
+      final projectRow = await _client
+          .from('projects')
+          .select()
+          .eq('id', projectId)
+          .eq('user_id', _userId)
+          .single();
+      final transactionRows = await _client
+          .from('project_transactions')
+          .select()
+          .eq('project_id', projectId)
+          .eq('user_id', _userId)
+          .order('transaction_date', ascending: false)
+          .order('created_at', ascending: false);
+      final data = {
+        'project': Map<String, dynamic>.from(projectRow),
+        'transactions': _asMaps(transactionRows),
+      };
+      await _localCache.write(_cacheKey('project.$projectId'), data);
+      return _projectDetailFromCache(data);
+    } catch (_) {
+      final cached = await _localCache.readMap(_cacheKey('project.$projectId'));
+      if (cached == null) rethrow;
+      return _projectDetailFromCache(cached);
+    }
+  }
+
+  ProjectDetail _projectDetailFromCache(Map<String, dynamic> data) {
+    final transactionRows = data['transactions'] is List
+        ? (data['transactions'] as List)
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList()
+        : const <Map<String, dynamic>>[];
     final transactions = transactionRows
         .map(ProjectTransactionModel.fromMap)
         .toList();
@@ -795,7 +825,7 @@ class SmetchikRepository {
         .fold<double>(0, (sum, item) => sum + item.amount);
     return ProjectDetail(
       project: ProjectModel.fromMap(
-        projectRow,
+        Map<String, dynamic>.from(data['project'] as Map),
       ).copyWith(incomeAmount: incomeAmount, expenseAmount: expenseAmount),
       transactions: transactions,
     );

@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
+import '../../data/offline_sync_service.dart';
 import '../../data/repository.dart';
+import '../../shared/offline_drafts_card.dart';
 import '../../shared/ui.dart';
 import '../../shared/upgrade_sheet.dart';
 import 'project_status_widgets.dart';
@@ -26,6 +28,7 @@ class _ProjectsWorkspaceState extends ConsumerState<ProjectsWorkspace> {
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider);
     final projects = ref.watch(projectsProvider);
+    final offlineSync = ref.watch(offlineSyncProvider);
     return RefreshIndicator(
       onRefresh: () async => ref.invalidate(projectsProvider),
       child: ResponsiveListView(
@@ -48,6 +51,16 @@ class _ProjectsWorkspaceState extends ConsumerState<ProjectsWorkspace> {
                   ]
                 : const [],
           ),
+          if (offlineSync.projectEntries.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            OfflineDraftsCard(
+              kind: OfflineDraftKind.project,
+              entries: offlineSync.projectEntries,
+              syncing: offlineSync.isSyncing,
+              onRetry: offlineSync.retryNow,
+              onDiscard: offlineSync.remove,
+            ),
+          ],
           const SizedBox(height: 14),
           _ProjectFilters(
             status: _status,
