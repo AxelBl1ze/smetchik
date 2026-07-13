@@ -28,6 +28,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             .catchError((_) => CatalogData.empty);
       });
       ref.read(clientsProvider.future).catchError((_) => <ClientModel>[]);
+      ref.read(projectsProvider.future).catchError((_) => <ProjectModel>[]);
     });
   }
 
@@ -35,6 +36,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider);
     final estimates = ref.watch(estimatesProvider);
+    final projects = ref.watch(projectsProvider);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -45,6 +47,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ref.invalidate(estimatesProvider);
             ref.invalidate(clientsProvider);
             ref.invalidate(catalogDataProvider);
+            ref.invalidate(projectsProvider);
           },
           child: ListView(
             padding: EdgeInsets.fromLTRB(
@@ -136,6 +139,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               const SizedBox(height: 14),
               _QuickActions(isDesktop: isDesktop),
+              const SizedBox(height: 12),
+              projects.when(
+                data: (items) => _ProjectSummaryCard(
+                  projects: items,
+                  onTap: () => context.go('/estimates?tab=projects'),
+                ),
+                loading: () => const _ProjectSummaryCard.loading(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
               const SizedBox(height: 18),
               SectionHeader(
                 title: 'Сметы в работе',
@@ -182,6 +194,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _ProjectSummaryCard extends StatelessWidget {
+  const _ProjectSummaryCard({required this.projects, required this.onTap})
+    : loading = false;
+
+  const _ProjectSummaryCard.loading()
+    : projects = const [],
+      onTap = null,
+      loading = true;
+
+  final List<ProjectModel> projects;
+  final VoidCallback? onTap;
+  final bool loading;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = projects
+        .where(
+          (project) => ProjectStatus.countsTowardsBasicLimit(project.status),
+        )
+        .toList();
+    final expenses = active.fold<double>(
+      0,
+      (sum, project) => sum + project.expenseAmount,
+    );
+    return SmetchikCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: AppColors.orangeLight,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.domain_outlined,
+              color: AppColors.orangeDark,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: loading
+                ? const Text(
+                    'Загружаем объекты...',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Объекты',
+                        style: TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        active.isEmpty
+                            ? 'Добавьте стройку и ведите затраты по ней'
+                            : '${active.length} в работе · потрачено ${formatMoney(expenses)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+          const Icon(Icons.chevron_right, color: AppColors.textHint),
+        ],
+      ),
     );
   }
 }

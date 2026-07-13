@@ -79,7 +79,9 @@ ThemeData buildAppTheme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
+        // `Size.fromHeight` creates an infinite minimum width. That works in
+        // a Column, but breaks compact actions placed in a Row or a Wrap.
+        minimumSize: const Size(0, 52),
         backgroundColor: AppColors.orange,
         foregroundColor: Colors.white,
         textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
@@ -88,7 +90,7 @@ ThemeData buildAppTheme() {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
+        minimumSize: const Size(0, 52),
         foregroundColor: AppColors.graphite,
         side: const BorderSide(color: AppColors.border, width: 1.5),
         textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),

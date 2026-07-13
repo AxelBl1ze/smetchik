@@ -63,6 +63,70 @@ class PdfService {
     return doc.save();
   }
 
+  static Future<Uint8List> buildProjectReportPdf({
+    required ProjectDetail detail,
+    required ProfileModel? profile,
+  }) async {
+    final (regular, bold) = await _fonts();
+    final theme = pw.ThemeData.withFont(base: regular, bold: bold);
+    final doc = pw.Document(theme: theme);
+    final logoImage = await _loadProfileImage(profile?.logoUrl);
+    final render = _PdfRenderOptions.fromProfile(profile, logoImage: logoImage);
+    final project = detail.project;
+    final expenses = detail.transactions
+        .where((item) => item.type == ProjectTransactionType.expense)
+        .toList();
+    final income = detail.transactions
+        .where((item) => item.type == ProjectTransactionType.income)
+        .toList();
+
+    doc.addPage(
+      pw.MultiPage(
+        pageTheme: _pageTheme(render),
+        footer: render.showServiceMark ? _serviceFooter : null,
+        build: (context) => [
+          _documentHeader(
+            render: render,
+            title: 'Отчёт по объекту',
+            subtitle: project.title,
+            meta: [
+              'Статус: ${ProjectStatus.label(project.status)}',
+              'Сформировано: ${formatDate(DateTime.now())}',
+            ],
+          ),
+          pw.SizedBox(height: 18),
+          _projectDetailsBlock(render, project),
+          pw.SizedBox(height: 18),
+          _sectionTitle(render, 'Финансовая сводка'),
+          pw.SizedBox(height: 8),
+          _projectFinanceSummary(render, project),
+          pw.SizedBox(height: 18),
+          _sectionTitle(render, 'Расходы'),
+          pw.SizedBox(height: 8),
+          expenses.isEmpty
+              ? _noteBlock(render, 'Расходы', 'Расходов по объекту пока нет.')
+              : _projectTransactionsTable(render, expenses),
+          pw.SizedBox(height: 18),
+          _sectionTitle(render, 'Поступления'),
+          pw.SizedBox(height: 8),
+          income.isEmpty
+              ? _noteBlock(
+                  render,
+                  'Поступления',
+                  'Поступлений по объекту пока нет.',
+                )
+              : _projectTransactionsTable(render, income),
+          if (project.notes?.trim().isNotEmpty == true) ...[
+            pw.SizedBox(height: 18),
+            _noteBlock(render, 'Заметка по объекту', project.notes!.trim()),
+          ],
+        ],
+      ),
+    );
+
+    return doc.save();
+  }
+
   static Future<Uint8List> buildEstimatePdf({
     required EstimateDetail detail,
     required ProfileModel? profile,
@@ -495,6 +559,47 @@ class PdfService {
     );
   }
 
+  static pw.Widget _projectDetailsBlock(
+    _PdfRenderOptions render,
+    ProjectModel project,
+  ) {
+    final schedule = [
+      'Начало: ${formatDate(project.startDate)}',
+      if (project.targetDate != null)
+        'План: ${formatDate(project.targetDate!)}',
+    ].join('\n');
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: render.surface,
+        borderRadius: pw.BorderRadius.circular(render.radius),
+        border: pw.Border.all(color: render.border),
+      ),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Expanded(
+            child: _infoBlock(
+              render,
+              'Адрес объекта',
+              project.objectAddress ?? '',
+            ),
+          ),
+          pw.SizedBox(width: 12),
+          pw.Expanded(
+            child: _infoBlock(
+              render,
+              'Заказчик / владелец',
+              project.customerName ?? '',
+            ),
+          ),
+          pw.SizedBox(width: 12),
+          pw.Expanded(child: _infoBlock(render, 'Сроки', schedule)),
+        ],
+      ),
+    );
+  }
+
   static pw.Widget _infoBlock(
     _PdfRenderOptions render,
     String label,
@@ -571,6 +676,119 @@ class PdfService {
       data: [
         for (final item in items)
           [item.title, item.unit, formatMoney(item.unitPrice)],
+      ],
+    );
+  }
+
+  static pw.Widget _projectFinanceSummary(
+    _PdfRenderOptions render,
+    ProjectModel project,
+  ) {
+    final expectedColor = project.expectedProfit >= 0
+        ? render.accent
+        : PdfColors.red700;
+    return pw.Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        _projectMetric(render, 'Плановая выручка', project.plannedRevenue),
+        _projectMetric(render, 'Получено', project.incomeAmount),
+        _projectMetric(render, 'Потрачено', project.expenseAmount),
+        _projectMetric(
+          render,
+          'Ожидаемая прибыль',
+          project.expectedProfit,
+          valueColor: expectedColor,
+        ),
+      ],
+    );
+  }
+
+  static pw.Widget _projectMetric(
+    _PdfRenderOptions render,
+    String label,
+    double value, {
+    PdfColor? valueColor,
+  }) {
+    return pw.Container(
+      width: 125,
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        color: render.surface,
+        borderRadius: pw.BorderRadius.circular(render.radius),
+        border: pw.Border.all(color: render.border),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            label,
+            style: pw.TextStyle(color: render.secondaryText, fontSize: 8),
+          ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            formatMoney(value),
+            style: pw.TextStyle(
+              color: valueColor ?? render.primaryText,
+              fontSize: 12,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _projectTransactionsTable(
+    _PdfRenderOptions render,
+    List<ProjectTransactionModel> transactions,
+  ) {
+    return pw.TableHelper.fromTextArray(
+      border: _tableBorder(render, grid: true),
+      headerDecoration: pw.BoxDecoration(color: render.tableHeader),
+      headerStyle: _tableHeaderStyle(render).copyWith(fontSize: 8),
+      cellStyle: pw.TextStyle(color: render.primaryText, fontSize: 8),
+      cellPadding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+      cellAlignment: pw.Alignment.centerLeft,
+      cellAlignments: {
+        0: pw.Alignment.centerLeft,
+        1: pw.Alignment.centerLeft,
+        2: pw.Alignment.centerLeft,
+        3: pw.Alignment.center,
+        4: pw.Alignment.centerLeft,
+        5: pw.Alignment.centerRight,
+      },
+      columnWidths: {
+        0: const pw.FlexColumnWidth(1.1),
+        1: const pw.FlexColumnWidth(2.4),
+        2: const pw.FlexColumnWidth(1.45),
+        3: const pw.FlexColumnWidth(1),
+        4: const pw.FlexColumnWidth(1.45),
+        5: const pw.FlexColumnWidth(1.2),
+      },
+      headers: [
+        'Дата',
+        'Операция',
+        'Категория',
+        'Кол-во',
+        'Контрагент',
+        'Сумма',
+      ],
+      data: [
+        for (final item in transactions)
+          [
+            formatDate(item.transactionDate),
+            item.title,
+            item.category,
+            item.quantity == null
+                ? '—'
+                : '${formatQuantity(item.quantity!)} ${item.unit?.trim() ?? ''}'
+                      .trim(),
+            item.counterparty?.trim().isNotEmpty == true
+                ? item.counterparty!.trim()
+                : '—',
+            formatMoney(item.amount),
+          ],
       ],
     );
   }

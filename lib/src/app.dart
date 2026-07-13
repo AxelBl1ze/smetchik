@@ -16,6 +16,8 @@ import 'features/estimates/estimate_form_screen.dart';
 import 'features/estimates/estimates_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/legal/legal_documents_screen.dart';
+import 'features/projects/project_detail_screen.dart';
+import 'features/projects/project_form_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'shared/app_shell.dart';
 
@@ -152,6 +154,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _page(
           state,
           EstimateDetailScreen(estimateId: state.pathParameters['id']!),
+        ),
+      ),
+      GoRoute(
+        path: '/projects/new',
+        pageBuilder: (context, state) =>
+            _page(state, const ProjectFormScreen()),
+      ),
+      GoRoute(
+        path: '/projects/:id/edit',
+        pageBuilder: (context, state) => _page(
+          state,
+          ProjectFormScreen(projectId: state.pathParameters['id']),
+        ),
+      ),
+      GoRoute(
+        path: '/projects/:id',
+        pageBuilder: (context, state) => _page(
+          state,
+          ProjectDetailScreen(projectId: state.pathParameters['id']!),
         ),
       ),
     ],

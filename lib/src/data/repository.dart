@@ -42,6 +42,14 @@ final estimatesProvider = FutureProvider<List<EstimateModel>>((ref) {
   return ref.watch(repositoryProvider).fetchEstimates();
 });
 
+final projectsProvider = FutureProvider<List<ProjectModel>>((ref) {
+  return ref.watch(repositoryProvider).fetchProjects();
+});
+
+final projectDetailProvider = FutureProvider.family<ProjectDetail, String>(
+  (ref, id) => ref.watch(repositoryProvider).fetchProjectDetail(id),
+);
+
 final estimateDetailProvider = FutureProvider.family<EstimateDetail, String>((
   ref,
   id,
@@ -725,6 +733,214 @@ class SmetchikRepository {
       'title': item.title,
       'unit': item.unit,
     });
+  }
+
+  Future<List<ProjectModel>> fetchProjects() async {
+    final rows = await _client
+        .from('projects')
+        .select()
+        .eq('user_id', _userId)
+        .order('updated_at', ascending: false);
+    final transactionRows = await _client
+        .from('project_transactions')
+        .select('project_id, transaction_type, amount')
+        .eq('user_id', _userId);
+    final incomeByProject = <String, double>{};
+    final expenseByProject = <String, double>{};
+    for (final row in transactionRows) {
+      final projectId = row['project_id'] as String?;
+      if (projectId == null) continue;
+      final amount = asDouble(row['amount']);
+      if (ProjectTransactionType.normalize(
+            row['transaction_type'] as String?,
+          ) ==
+          ProjectTransactionType.income) {
+        incomeByProject[projectId] = (incomeByProject[projectId] ?? 0) + amount;
+      } else {
+        expenseByProject[projectId] =
+            (expenseByProject[projectId] ?? 0) + amount;
+      }
+    }
+    return rows.map((row) {
+      final project = ProjectModel.fromMap(row);
+      return project.copyWith(
+        incomeAmount: incomeByProject[project.id] ?? 0,
+        expenseAmount: expenseByProject[project.id] ?? 0,
+      );
+    }).toList();
+  }
+
+  Future<ProjectDetail> fetchProjectDetail(String projectId) async {
+    final projectRow = await _client
+        .from('projects')
+        .select()
+        .eq('id', projectId)
+        .eq('user_id', _userId)
+        .single();
+    final transactionRows = await _client
+        .from('project_transactions')
+        .select()
+        .eq('project_id', projectId)
+        .eq('user_id', _userId)
+        .order('transaction_date', ascending: false)
+        .order('created_at', ascending: false);
+    final transactions = transactionRows
+        .map(ProjectTransactionModel.fromMap)
+        .toList();
+    final incomeAmount = transactions
+        .where((item) => item.type == ProjectTransactionType.income)
+        .fold<double>(0, (sum, item) => sum + item.amount);
+    final expenseAmount = transactions
+        .where((item) => item.type == ProjectTransactionType.expense)
+        .fold<double>(0, (sum, item) => sum + item.amount);
+    return ProjectDetail(
+      project: ProjectModel.fromMap(
+        projectRow,
+      ).copyWith(incomeAmount: incomeAmount, expenseAmount: expenseAmount),
+      transactions: transactions,
+    );
+  }
+
+  Future<String> saveProject(ProjectDraft draft, {String? projectId}) async {
+    final status = ProjectStatus.normalize(draft.status);
+    if (ProjectStatus.countsTowardsBasicLimit(status)) {
+      if (projectId == null) {
+        await _ensureCanCreateProject();
+      } else {
+        final current = await _client
+            .from('projects')
+            .select('status')
+            .eq('id', projectId)
+            .eq('user_id', _userId)
+            .maybeSingle();
+        final wasClosed =
+            current == null ||
+            !ProjectStatus.countsTowardsBasicLimit(
+              ProjectStatus.normalize(current['status'] as String?),
+            );
+        if (wasClosed) {
+          await _ensureCanCreateProject(excludingProjectId: projectId);
+        }
+      }
+    }
+    final payload = {
+      'user_id': _userId,
+      'title': draft.title.trim(),
+      'object_address': _blankToNull(draft.objectAddress),
+      'customer_name': _blankToNull(draft.customerName),
+      'planned_revenue': draft.plannedRevenue,
+      'start_date': draft.startDate.toIso8601String().split('T').first,
+      'target_date': draft.targetDate?.toIso8601String().split('T').first,
+      'status': status,
+      'notes': _blankToNull(draft.notes),
+    };
+    if (projectId == null) {
+      final row = await _client
+          .from('projects')
+          .insert(payload)
+          .select('id')
+          .single();
+      return row['id'] as String;
+    }
+    await _client
+        .from('projects')
+        .update(payload)
+        .eq('id', projectId)
+        .eq('user_id', _userId);
+    return projectId;
+  }
+
+  Future<void> updateProjectStatus(String projectId, String status) async {
+    final normalizedStatus = ProjectStatus.normalize(status);
+    if (ProjectStatus.countsTowardsBasicLimit(normalizedStatus)) {
+      final current = await _client
+          .from('projects')
+          .select('status')
+          .eq('id', projectId)
+          .eq('user_id', _userId)
+          .maybeSingle();
+      final wasClosed =
+          current == null ||
+          !ProjectStatus.countsTowardsBasicLimit(
+            ProjectStatus.normalize(current['status'] as String?),
+          );
+      if (wasClosed) {
+        await _ensureCanCreateProject(excludingProjectId: projectId);
+      }
+    }
+    await _client
+        .from('projects')
+        .update({'status': normalizedStatus})
+        .eq('id', projectId)
+        .eq('user_id', _userId);
+  }
+
+  Future<void> deleteProject(String projectId) {
+    return _client
+        .from('projects')
+        .delete()
+        .eq('id', projectId)
+        .eq('user_id', _userId);
+  }
+
+  Future<void> saveProjectTransaction({
+    required String projectId,
+    required ProjectTransactionDraft draft,
+    String? transactionId,
+  }) async {
+    final payload = {
+      'user_id': _userId,
+      'project_id': projectId,
+      'transaction_type': ProjectTransactionType.normalize(draft.type),
+      'category': draft.category.trim(),
+      'title': draft.title.trim(),
+      'amount': draft.amount,
+      'quantity': draft.quantity,
+      'unit': _blankToNull(draft.unit),
+      'transaction_date': draft.transactionDate
+          .toIso8601String()
+          .split('T')
+          .first,
+      'counterparty': _blankToNull(draft.counterparty),
+      'notes': _blankToNull(draft.notes),
+    };
+    if (transactionId == null) {
+      await _client.from('project_transactions').insert(payload);
+      return;
+    }
+    await _client
+        .from('project_transactions')
+        .update(payload)
+        .eq('id', transactionId)
+        .eq('project_id', projectId)
+        .eq('user_id', _userId);
+  }
+
+  Future<void> deleteProjectTransaction(String transactionId) {
+    return _client
+        .from('project_transactions')
+        .delete()
+        .eq('id', transactionId)
+        .eq('user_id', _userId);
+  }
+
+  Future<void> _ensureCanCreateProject({String? excludingProjectId}) async {
+    final profile = await fetchProfile();
+    if (profile?.hasActivePro == true) return;
+    var query = _client
+        .from('projects')
+        .select('id')
+        .eq('user_id', _userId)
+        .inFilter('status', [ProjectStatus.planning, ProjectStatus.active]);
+    if (excludingProjectId != null) {
+      query = query.neq('id', excludingProjectId);
+    }
+    final rows = await query;
+    if (rows.isNotEmpty) {
+      throw Exception(
+        'На Базовом тарифе доступен один активный объект. Подключите Профи, чтобы вести объекты без ограничений.',
+      );
+    }
   }
 
   Future<List<EstimateModel>> fetchEstimates() async {

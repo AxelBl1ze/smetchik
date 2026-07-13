@@ -83,6 +83,112 @@ class EstimateStatus {
   static bool isCompleted(String value) => normalize(value) == completed;
 }
 
+class ProjectStatus {
+  const ProjectStatus._();
+
+  static const planning = 'planning';
+  static const active = 'active';
+  static const completed = 'completed';
+  static const sold = 'sold';
+
+  static const values = [planning, active, completed, sold];
+
+  static String normalize(String? value) {
+    return switch ((value ?? '').trim()) {
+      active => active,
+      completed => completed,
+      sold => sold,
+      _ => planning,
+    };
+  }
+
+  static String label(String value) {
+    return switch (normalize(value)) {
+      active => 'Строится',
+      completed => 'Завершён',
+      sold => 'Продан',
+      _ => 'Планируется',
+    };
+  }
+
+  static bool countsTowardsBasicLimit(String value) {
+    final normalized = normalize(value);
+    return normalized == planning || normalized == active;
+  }
+}
+
+class ProjectTransactionType {
+  const ProjectTransactionType._();
+
+  static const income = 'income';
+  static const expense = 'expense';
+
+  static String normalize(String? value) => value == income ? income : expense;
+
+  static String label(String value) =>
+      normalize(value) == income ? 'Поступление' : 'Расход';
+}
+
+/// Группы операций для внутреннего учёта строительства.
+///
+/// Наименование операции остаётся свободным, а категория помогает быстро
+/// собрать расходы в аналитике и выгрузках без разрастания списка значений.
+class ProjectTransactionCategory {
+  const ProjectTransactionCategory._();
+
+  static const materials = 'Материалы';
+  static const labor = 'Работы и бригада';
+  static const contractors = 'Подрядчики';
+  static const equipment = 'Техника и аренда';
+  static const delivery = 'Доставка и логистика';
+  static const tools = 'Инструмент и расходники';
+  static const sitePreparation = 'Участок и подготовка';
+  static const designAndDocuments = 'Проектирование и документы';
+  static const utilitiesAndSecurity = 'Коммунальные и охрана';
+  static const taxesAndPermits = 'Налоги и разрешения';
+  static const salesAndMarketing = 'Продажи и реклама';
+  static const advance = 'Аванс от заказчика';
+  static const stagePayment = 'Оплата этапа';
+  static const finalPayment = 'Финальный расчёт';
+  static const propertySale = 'Продажа объекта';
+  static const refund = 'Возврат средств';
+  static const other = 'Другое';
+
+  static const expenseValues = [
+    materials,
+    labor,
+    contractors,
+    equipment,
+    delivery,
+    tools,
+    sitePreparation,
+    designAndDocuments,
+    utilitiesAndSecurity,
+    taxesAndPermits,
+    salesAndMarketing,
+    other,
+  ];
+
+  static const incomeValues = [
+    advance,
+    stagePayment,
+    finalPayment,
+    propertySale,
+    refund,
+    other,
+  ];
+
+  static List<String> valuesForType(String type) =>
+      ProjectTransactionType.normalize(type) == ProjectTransactionType.income
+      ? incomeValues
+      : expenseValues;
+
+  static String defaultForType(String type) =>
+      ProjectTransactionType.normalize(type) == ProjectTransactionType.income
+      ? advance
+      : materials;
+}
+
 class SubscriptionPlan {
   const SubscriptionPlan._();
 
@@ -128,11 +234,15 @@ class SubscriptionPlan {
         'Дублирование смет',
         'Настройки PDF',
         'Расширенная статистика',
+        'Безлимитные объекты и учёт затрат',
+        'Аналитика прибыли по объектам',
+        'Экспорт объектов в Excel и PDF',
       ],
       _ => const [
         'До 10 новых смет в месяц',
         'До 20 клиентов',
         'Стандартный PDF с отметкой Сметчика',
+        '1 активный объект с базовым учётом',
       ],
     };
   }
@@ -560,6 +670,183 @@ class CatalogItemModel {
       isCustom: (map['is_custom'] as bool?) ?? true,
     );
   }
+}
+
+class ProjectModel {
+  const ProjectModel({
+    required this.id,
+    required this.title,
+    this.objectAddress,
+    this.customerName,
+    required this.plannedRevenue,
+    required this.startDate,
+    this.targetDate,
+    required this.status,
+    this.notes,
+    required this.createdAt,
+    this.incomeAmount = 0,
+    this.expenseAmount = 0,
+  });
+
+  final String id;
+  final String title;
+  final String? objectAddress;
+  final String? customerName;
+  final double plannedRevenue;
+  final DateTime startDate;
+  final DateTime? targetDate;
+  final String status;
+  final String? notes;
+  final DateTime createdAt;
+  final double incomeAmount;
+  final double expenseAmount;
+
+  double get actualProfit => incomeAmount - expenseAmount;
+  double get expectedProfit => plannedRevenue - expenseAmount;
+
+  factory ProjectModel.fromMap(Map<String, dynamic> map) {
+    return ProjectModel(
+      id: map['id'] as String,
+      title: (map['title'] as String?) ?? '',
+      objectAddress: map['object_address'] as String?,
+      customerName: map['customer_name'] as String?,
+      plannedRevenue: asDouble(map['planned_revenue']),
+      startDate: asDate(map['start_date']),
+      targetDate: asDateOrNull(map['target_date']),
+      status: ProjectStatus.normalize(map['status'] as String?),
+      notes: map['notes'] as String?,
+      createdAt: asDate(map['created_at']),
+      incomeAmount: asDouble(map['income_amount']),
+      expenseAmount: asDouble(map['expense_amount']),
+    );
+  }
+
+  ProjectModel copyWith({
+    String? title,
+    String? objectAddress,
+    String? customerName,
+    double? plannedRevenue,
+    DateTime? startDate,
+    DateTime? targetDate,
+    String? status,
+    String? notes,
+    double? incomeAmount,
+    double? expenseAmount,
+  }) {
+    return ProjectModel(
+      id: id,
+      title: title ?? this.title,
+      objectAddress: objectAddress ?? this.objectAddress,
+      customerName: customerName ?? this.customerName,
+      plannedRevenue: plannedRevenue ?? this.plannedRevenue,
+      startDate: startDate ?? this.startDate,
+      targetDate: targetDate ?? this.targetDate,
+      status: status ?? this.status,
+      notes: notes ?? this.notes,
+      createdAt: createdAt,
+      incomeAmount: incomeAmount ?? this.incomeAmount,
+      expenseAmount: expenseAmount ?? this.expenseAmount,
+    );
+  }
+}
+
+class ProjectTransactionModel {
+  const ProjectTransactionModel({
+    required this.id,
+    required this.projectId,
+    required this.type,
+    required this.category,
+    required this.title,
+    required this.amount,
+    this.quantity,
+    this.unit,
+    required this.transactionDate,
+    this.counterparty,
+    this.notes,
+  });
+
+  final String id;
+  final String projectId;
+  final String type;
+  final String category;
+  final String title;
+  final double amount;
+  final double? quantity;
+  final String? unit;
+  final DateTime transactionDate;
+  final String? counterparty;
+  final String? notes;
+
+  factory ProjectTransactionModel.fromMap(Map<String, dynamic> map) {
+    return ProjectTransactionModel(
+      id: map['id'] as String,
+      projectId: map['project_id'] as String,
+      type: ProjectTransactionType.normalize(
+        map['transaction_type'] as String?,
+      ),
+      category: (map['category'] as String?) ?? 'Другое',
+      title: (map['title'] as String?) ?? '',
+      amount: asDouble(map['amount']),
+      quantity: map['quantity'] == null ? null : asDouble(map['quantity']),
+      unit: map['unit'] as String?,
+      transactionDate: asDate(map['transaction_date']),
+      counterparty: map['counterparty'] as String?,
+      notes: map['notes'] as String?,
+    );
+  }
+}
+
+class ProjectDetail {
+  const ProjectDetail({required this.project, required this.transactions});
+
+  final ProjectModel project;
+  final List<ProjectTransactionModel> transactions;
+}
+
+class ProjectDraft {
+  const ProjectDraft({
+    required this.title,
+    this.objectAddress,
+    this.customerName,
+    required this.plannedRevenue,
+    required this.startDate,
+    this.targetDate,
+    required this.status,
+    this.notes,
+  });
+
+  final String title;
+  final String? objectAddress;
+  final String? customerName;
+  final double plannedRevenue;
+  final DateTime startDate;
+  final DateTime? targetDate;
+  final String status;
+  final String? notes;
+}
+
+class ProjectTransactionDraft {
+  const ProjectTransactionDraft({
+    required this.type,
+    required this.category,
+    required this.title,
+    required this.amount,
+    this.quantity,
+    this.unit,
+    required this.transactionDate,
+    this.counterparty,
+    this.notes,
+  });
+
+  final String type;
+  final String category;
+  final String title;
+  final double amount;
+  final double? quantity;
+  final String? unit;
+  final DateTime transactionDate;
+  final String? counterparty;
+  final String? notes;
 }
 
 class EstimateModel {

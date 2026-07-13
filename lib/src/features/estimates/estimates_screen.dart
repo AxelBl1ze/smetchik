@@ -5,7 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
+import '../projects/projects_workspace.dart';
 import '../../shared/ui.dart';
+
+enum _EstimateWorkspace { estimates, projects }
 
 class EstimatesScreen extends ConsumerStatefulWidget {
   const EstimatesScreen({super.key});
@@ -22,6 +25,10 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
   Widget build(BuildContext context) {
     final estimates = ref.watch(estimatesProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= 840;
+    final workspace =
+        GoRouterState.of(context).uri.queryParameters['tab'] == 'projects'
+        ? _EstimateWorkspace.projects
+        : _EstimateWorkspace.estimates;
     return Scaffold(
       appBar: isDesktop
           ? null
@@ -29,89 +36,147 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
               title: null,
               actions: [
                 IconButton(
-                  tooltip: 'Новая смета',
-                  onPressed: () => context.push('/estimate/new'),
-                  icon: const Icon(Icons.add_circle_outline),
+                  tooltip: workspace == _EstimateWorkspace.estimates
+                      ? 'Новая смета'
+                      : 'Новый объект',
+                  onPressed: () => context.push(
+                    workspace == _EstimateWorkspace.estimates
+                        ? '/estimate/new'
+                        : '/projects/new',
+                  ),
+                  icon: Icon(
+                    workspace == _EstimateWorkspace.estimates
+                        ? Icons.add_circle_outline
+                        : Icons.domain_add_outlined,
+                  ),
                 ),
               ],
             ),
-      body: RefreshIndicator(
-        onRefresh: () async => ref.invalidate(estimatesProvider),
-        child: ResponsiveListView(
-          maxWidth: 900,
-          children: [
-            ScreenTitle(
-              title: 'Сметы',
-              subtitle: 'Черновики, отправленные и работы в процессе',
-              icon: Icons.receipt_long_outlined,
-              actions: isDesktop
-                  ? [
-                      SizedBox(
-                        width: 190,
-                        child: FilledButton.icon(
-                          onPressed: () => context.push('/estimate/new'),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Новая смета'),
-                        ),
-                      ),
-                    ]
-                  : const [],
-            ),
-            const SizedBox(height: 14),
-            _EstimatesSearchField(onChanged: _setQuery),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _filterChip('all', 'Все'),
-                  _filterChip(EstimateStatus.draft, 'Черновики'),
-                  _filterChip(EstimateStatus.sent, 'Отправлены'),
-                  _filterChip(EstimateStatus.accepted, 'Приняты'),
-                  _filterChip(EstimateStatus.inProgress, 'В работе'),
-                  _filterChip(EstimateStatus.completed, 'Завершены'),
-                  _filterChip(EstimateStatus.declined, 'Отклонены'),
-                ],
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 900),
+              child: SizedBox(
+                width: double.infinity,
+                child: SegmentedButton<_EstimateWorkspace>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _EstimateWorkspace.estimates,
+                      icon: Icon(Icons.receipt_long_outlined),
+                      label: Text('Сметы'),
+                    ),
+                    ButtonSegment(
+                      value: _EstimateWorkspace.projects,
+                      icon: Icon(Icons.domain_outlined),
+                      label: Text('Объекты'),
+                    ),
+                  ],
+                  selected: {workspace},
+                  onSelectionChanged: (value) => context.go(
+                    value.first == _EstimateWorkspace.projects
+                        ? '/estimates?tab=projects'
+                        : '/estimates',
+                  ),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
-            estimates.when(
-              data: (items) {
-                final filtered = items.where((estimate) {
-                  final matchesStatus =
-                      _status == 'all' ||
-                      EstimateStatus.normalize(estimate.status) == _status;
-                  final haystack =
-                      '${estimate.objectTitle} ${estimate.client?.name ?? ''}'
-                          .toLowerCase();
-                  return matchesStatus && haystack.contains(_query);
-                }).toList();
-                if (filtered.isEmpty) {
-                  return EmptyState(
-                    icon: Icons.file_copy_outlined,
-                    title: 'Сметы не найдены',
-                    body: 'Создайте новую смету или измените фильтр.',
-                    action: FilledButton.icon(
-                      onPressed: () => context.push('/estimate/new'),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Новая смета'),
+          ),
+          Expanded(
+            child: workspace == _EstimateWorkspace.projects
+                ? ProjectsWorkspace(isDesktop: isDesktop)
+                : RefreshIndicator(
+                    onRefresh: () async => ref.invalidate(estimatesProvider),
+                    child: ResponsiveListView(
+                      maxWidth: 900,
+                      children: [
+                        ScreenTitle(
+                          title: 'Сметы',
+                          subtitle:
+                              'Черновики, отправленные и работы в процессе',
+                          icon: Icons.receipt_long_outlined,
+                          actions: isDesktop
+                              ? [
+                                  SizedBox(
+                                    width: 190,
+                                    child: FilledButton.icon(
+                                      onPressed: () =>
+                                          context.push('/estimate/new'),
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Новая смета'),
+                                    ),
+                                  ),
+                                ]
+                              : const [],
+                        ),
+                        const SizedBox(height: 14),
+                        _EstimatesSearchField(onChanged: _setQuery),
+                        const SizedBox(height: 10),
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _filterChip('all', 'Все'),
+                              _filterChip(EstimateStatus.draft, 'Черновики'),
+                              _filterChip(EstimateStatus.sent, 'Отправлены'),
+                              _filterChip(EstimateStatus.accepted, 'Приняты'),
+                              _filterChip(
+                                EstimateStatus.inProgress,
+                                'В работе',
+                              ),
+                              _filterChip(
+                                EstimateStatus.completed,
+                                'Завершены',
+                              ),
+                              _filterChip(EstimateStatus.declined, 'Отклонены'),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        estimates.when(
+                          data: (items) {
+                            final filtered = items.where((estimate) {
+                              final matchesStatus =
+                                  _status == 'all' ||
+                                  EstimateStatus.normalize(estimate.status) ==
+                                      _status;
+                              final haystack =
+                                  '${estimate.objectTitle} ${estimate.client?.name ?? ''}'
+                                      .toLowerCase();
+                              return matchesStatus && haystack.contains(_query);
+                            }).toList();
+                            if (filtered.isEmpty) {
+                              return EmptyState(
+                                icon: Icons.file_copy_outlined,
+                                title: 'Сметы не найдены',
+                                body:
+                                    'Создайте новую смету или измените фильтр.',
+                                action: FilledButton.icon(
+                                  onPressed: () =>
+                                      context.push('/estimate/new'),
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Новая смета'),
+                                ),
+                              );
+                            }
+                            return Column(
+                              children: [
+                                for (final estimate in filtered) ...[
+                                  _EstimateListCard(estimate: estimate),
+                                  const SizedBox(height: 8),
+                                ],
+                              ],
+                            );
+                          },
+                          loading: () => const LoadingPane(),
+                          error: (error, _) => ErrorPane(error: error),
+                        ),
+                      ],
                     ),
-                  );
-                }
-                return Column(
-                  children: [
-                    for (final estimate in filtered) ...[
-                      _EstimateListCard(estimate: estimate),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                );
-              },
-              loading: () => const LoadingPane(),
-              error: (error, _) => ErrorPane(error: error),
-            ),
-          ],
-        ),
+                  ),
+          ),
+        ],
       ),
     );
   }
