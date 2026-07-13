@@ -4016,7 +4016,7 @@ class _TariffSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxContentHeight = MediaQuery.sizeOf(context).height * 0.68;
+    final sheetHeight = MediaQuery.sizeOf(context).height * 0.78;
     return SafeArea(
       top: false,
       child: Align(
@@ -4024,6 +4024,7 @@ class _TariffSheet extends StatelessWidget {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
           child: Container(
+            height: sheetHeight,
             margin: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: AppColors.card,
@@ -4038,7 +4039,6 @@ class _TariffSheet extends StatelessWidget {
               ],
             ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
@@ -4094,8 +4094,7 @@ class _TariffSheet extends StatelessWidget {
                     ],
                   ),
                 ),
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: maxContentHeight),
+                Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
                     child: Column(

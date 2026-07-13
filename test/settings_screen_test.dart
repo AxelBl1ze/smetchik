@@ -83,7 +83,9 @@ void main() {
           ),
           estimatesProvider.overrideWith((_) async => const <EstimateModel>[]),
         ],
-        child: const MaterialApp(home: SettingsScreen()),
+        child: const MaterialApp(
+          home: AppShell(selectedIndex: 4, child: SettingsScreen()),
+        ),
       ),
     );
     await tester.pumpAndSettle();
