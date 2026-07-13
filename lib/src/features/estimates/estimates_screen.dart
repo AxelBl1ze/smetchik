@@ -165,14 +165,15 @@ class _WorkspaceSwitcher extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 410),
         child: Container(
-          height: 68,
-          padding: const EdgeInsets.all(5),
+          height: 56,
+          padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             color: AppColors.card,
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(17),
             border: Border.all(color: AppColors.border),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _WorkspaceSwitchOption(
                 selected: selected == _EstimateWorkspace.estimates,
@@ -213,23 +214,23 @@ class _WorkspaceSwitchOption extends StatelessWidget {
     return Expanded(
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(13),
         child: InkWell(
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(13),
           onTap: onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOutCubic,
             decoration: BoxDecoration(
               color: selected ? AppColors.graphite : Colors.transparent,
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(13),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   icon,
-                  size: 20,
+                  size: 18,
                   color: selected ? AppColors.orange : AppColors.textSecondary,
                 ),
                 const SizedBox(width: 7),
@@ -237,7 +238,7 @@ class _WorkspaceSwitchOption extends StatelessWidget {
                   label,
                   style: TextStyle(
                     color: selected ? Colors.white : AppColors.textSecondary,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
