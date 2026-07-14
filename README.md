@@ -1,108 +1,170 @@
-# Сметчик
+<p align="center">
+  <img src="web/icons/Icon-512.png" width="92" alt="Логотип Сметчик" />
+</p>
 
-Flutter MVP для создания смет, клиентов, каталога работ и PDF-коммерческих предложений.
+<h1 align="center">Сметчик</h1>
 
-## Запуск
+<p align="center">
+  Рабочий инструмент мастера для быстрых смет, клиентов, прайс-листа и PDF прямо на объекте.
+</p>
 
-Supabase dev-проект уже прописан в `lib/src/core/app_config.dart`, поэтому для обычного запуска достаточно:
+<p align="center">
+  <a href="https://smetchik.pages.dev/">
+    <img src="https://img.shields.io/badge/%D0%9E%D1%82%D0%BA%D1%80%D1%8B%D1%82%D1%8C_%D0%A1%D0%BC%D0%B5%D1%82%D1%87%D0%B8%D0%BA-FF8500?style=for-the-badge&logo=flutter&logoColor=white" alt="Открыть веб-версию" />
+  </a>
+  <a href="#быстрый-старт">
+    <img src="https://img.shields.io/badge/%D0%97%D0%B0%D0%BF%D1%83%D1%81%D1%82%D0%B8%D1%82%D1%8C_%D0%BB%D0%BE%D0%BA%D0%B0%D0%BB%D1%8C%D0%BD%D0%BE-1A1A1A?style=for-the-badge&logo=github&logoColor=white" alt="Запустить локально" />
+  </a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Flutter-3.44%2B-02569B?style=flat-square&logo=flutter&logoColor=white" alt="Flutter" />
+  <img src="https://img.shields.io/badge/Supabase-Auth%20%7C%20Postgres%20%7C%20Storage-3ECF8E?style=flat-square&logo=supabase&logoColor=white" alt="Supabase" />
+  <img src="https://img.shields.io/badge/PWA-Mobile--first-F5820D?style=flat-square" alt="PWA" />
+  <img src="https://img.shields.io/badge/Статус-MVP-3B6D11?style=flat-square" alt="Статус MVP" />
+</p>
+
+---
+
+## Что это
+
+**Сметчик** помогает сантехникам, электрикам, отделочникам, монтажникам и частным строительным бригадам подготовить понятную смету за несколько минут, отправить её клиенту в PDF и следить за работой по объектам.
+
+Продукт сделан mobile-first: крупные зоны касания, нижняя навигация, минимум полей и нормальный сценарий работы одной рукой. На широком экране интерфейс перестраивается в рабочий desktop-layout с верхними вкладками.
+
+## Экраны
+
+<p align="center">
+  <img src="docs/screenshots/auth-login.png" width="260" alt="Вход в Сметчик" />
+  <img src="docs/screenshots/auth-signup.png" width="260" alt="Регистрация в Сметчике" />
+</p>
+
+<p align="center"><sub>Чистые скриншоты iOS-версии: вход и создание аккаунта.</sub></p>
+
+## Возможности MVP
+
+| Раздел | Что уже работает |
+| --- | --- |
+| **Сметы** | Работы, количество, цена, статусы, дублирование, история версий и блокировка после подписания. |
+| **PDF** | Коммерческое предложение с шаблонами, цветом, логотипом, росписями, QR-кодом оплаты и настройками Профи. |
+| **Подписание** | Клиент открывает смету по QR-ссылке, подтверждает условия и оставляет роспись. Финальный PDF и метаданные подписи сохраняются отдельно. |
+| **Прайс-лист** | Категории с иконками, собственные услуги, редактирование цен, поиск и отправка прайс-листа. |
+| **Клиенты** | Контакты, телефон с российским форматом, адрес с подсказками, комментарии и история смет. |
+| **Объекты** | Внутренний учёт стройки: план, расходы, поступления, прибыль, экспорт PDF и Excel. |
+| **Офлайн** | Кэш ранее открытых данных; новые сметы и объекты сохраняются на устройстве и автоматически синхронизируются после восстановления сети. |
+| **Доступ** | Email + пароль, вход кодом, восстановление пароля, подготовленная Telegram-авторизация. |
+
+> Подписанные сметы не меняются офлайн намеренно: это защищает финальный документ и юридическую историю.
+
+## Платформы
+
+| Платформа | Статус |
+| --- | --- |
+| Web / PWA | Публикуется через Cloudflare Pages, устанавливается на домашний экран. |
+| Android | Нативная Flutter-сборка, готовится `AAB` для Google Play. |
+| iOS | Нативный target подготовлен; публикация в App Store требует Apple Developer Program и релизной процедуры. |
+
+## Технологии
+
+- **Flutter / Dart**: единая кодовая база для web, Android и iOS.
+- **Supabase**: Auth, PostgreSQL с RLS, Storage и Edge Functions.
+- **Riverpod + GoRouter**: состояние и маршрутизация.
+- **pdf + printing + share_plus**: генерация, просмотр и передача PDF.
+- **Cloudflare Pages**: веб-деплой из ветки `main`.
+- **SharedPreferences**: локальный кэш и очередь офлайн-черновиков.
+
+## Быстрый старт
 
 ```bash
+git clone https://github.com/AxelBl1ze/smetchik.git
+cd smetchik
+flutter pub get
 flutter run -d chrome
 ```
 
-Для QR-подписания укажите публичный адрес веб-версии при сборке. Адрес
-Cloudflare Pages `https://smetchik.pages.dev` уже является значением по
-умолчанию, а при подключении собственного домена его можно переопределить:
-
-```bash
---dart-define=PUBLIC_APP_URL=https://YOUR_PUBLIC_APP_URL
-```
-
-В Cloudflare Pages переменная `PUBLIC_APP_URL` задаётся в `Settings →
-Environment variables`; `scripts/cloudflare_build.sh` передаёт её в Flutter
-при каждой автоматической сборке из GitHub.
-
-Для запуска с другим Supabase-проектом можно переопределить параметры через `dart-define`:
+Для запуска с другим проектом Supabase передайте публичные параметры сборки:
 
 ```bash
 flutter run -d chrome \
   --dart-define=SUPABASE_URL=https://PROJECT_REF.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY
+  --dart-define=SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
 ```
 
-Если дефолтные значения убрать из `app_config.dart`, без этих параметров приложение откроет экран настройки.
+Не добавляйте service role key, SMTP-пароли, ключи UniSender, Telegram или DaData в клиентский код и в Git. Такие данные должны лежать только в Supabase Secrets или секретах CI.
 
-Подсказки российских адресов работают через Supabase Edge Function `suggest-addresses`.
-Ключ DaData хранится только в Supabase secrets, во Flutter-приложение он не попадает.
-Если секрет не задан, функция использует запасной поиск Nominatim/OpenStreetMap по России.
-
-```bash
-SUPABASE_TELEMETRY_DISABLED=1 supabase secrets set DADATA_API_KEY=YOUR_DADATA_API_KEY --project-ref kvuhtxipcrjsglklaury
-SUPABASE_TELEMETRY_DISABLED=1 supabase functions deploy suggest-addresses --project-ref kvuhtxipcrjsglklaury --use-api
-```
-
-Email-коды отправляются через Supabase Auth Send Email Hook и Edge Function
-`send-auth-email`. API-ключ UniSender, hook secret, list id и sender email
-должны храниться только в Supabase secrets:
-
-```bash
-SUPABASE_TELEMETRY_DISABLED=1 supabase secrets set \
-  UNISENDER_API_KEY=YOUR_UNISENDER_API_KEY \
-  UNISENDER_LIST_ID=YOUR_UNISENDER_LIST_ID \
-  UNISENDER_SENDER_EMAIL=YOUR_VERIFIED_SENDER_EMAIL \
-  UNISENDER_SENDER_NAME=Сметчик \
-  SEND_EMAIL_HOOK_SECRET=YOUR_SEND_EMAIL_HOOK_SECRET \
-  --project-ref kvuhtxipcrjsglklaury
-
-SUPABASE_TELEMETRY_DISABLED=1 supabase functions deploy send-auth-email \
-  --use-api \
-  --no-verify-jwt \
-  --project-ref kvuhtxipcrjsglklaury
-```
-
-В Supabase Dashboard нужно включить `Authentication -> Hooks -> Send Email`
-и указать URL функции:
-
-```text
-https://kvuhtxipcrjsglklaury.supabase.co/functions/v1/send-auth-email
-```
-
-Secret в Dashboard должен совпадать с `SEND_EMAIL_HOOK_SECRET` в Supabase
-Edge Function secrets. В репозиторий эти значения не добавляются.
-
-## Supabase
-
-CLI в этом окружении нужно запускать с отключенной telemetry:
-
-```bash
-SUPABASE_TELEMETRY_DISABLED=1 supabase login
-SUPABASE_TELEMETRY_DISABLED=1 supabase orgs list
-SUPABASE_TELEMETRY_DISABLED=1 supabase projects create smetchik --org-id ORG_ID --db-password STRONG_PASSWORD --region eu-central-1
-SUPABASE_TELEMETRY_DISABLED=1 supabase link --project-ref PROJECT_REF --password STRONG_PASSWORD
-SUPABASE_TELEMETRY_DISABLED=1 supabase db push
-```
-
-Схема находится в `supabase/migrations/202606110001_initial_smetchik_schema.sql`.
-
-## Сборки
+## Проверка качества
 
 ```bash
 flutter analyze
 flutter test
-flutter build web --release \
-  --dart-define=SUPABASE_URL=https://PROJECT_REF.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY
-JAVA_HOME=/Users/ilyasidnev/Library/Java/JavaVirtualMachines/corretto-21.0.5/Contents/Home \
-  flutter build appbundle --release \
-  --dart-define=SUPABASE_URL=https://PROJECT_REF.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY
+flutter build web --release
 ```
 
-Для текущего dev-проекта можно собирать короче:
+## Деплой Web / PWA
+
+Проект рассчитан на Cloudflare Pages. Скрипт [scripts/cloudflare_build.sh](scripts/cloudflare_build.sh) устанавливает Flutter stable, получает зависимости и собирает `build/web`.
+
+В Cloudflare Pages укажите:
+
+| Поле | Значение |
+| --- | --- |
+| Build command | `bash scripts/cloudflare_build.sh` |
+| Build output directory | `build/web` |
+| Production branch | `main` |
+
+Переменные окружения для production и preview:
+
+```text
+SUPABASE_URL=https://PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
+PUBLIC_APP_URL=https://YOUR_DOMAIN
+```
+
+После подключения репозитория к Cloudflare Pages каждый push в `main` запускает новую сборку автоматически.
+
+## Supabase
+
+Миграции лежат в [supabase/migrations](supabase/migrations), Edge Functions - в [supabase/functions](supabase/functions).
 
 ```bash
-flutter build web --release
-JAVA_HOME=/Users/ilyasidnev/Library/Java/JavaVirtualMachines/corretto-21.0.5/Contents/Home flutter build appbundle --release
+SUPABASE_TELEMETRY_DISABLED=1 supabase link \
+  --project-ref PROJECT_REF \
+  --password STRONG_PASSWORD
+
+SUPABASE_TELEMETRY_DISABLED=1 supabase db push
 ```
 
-Для Google Play создайте release keystore, скопируйте `android/key.properties.example` в `android/key.properties` и заполните реальные значения. Без `key.properties` сборка использует debug signing только для технической проверки.
+Используемые Edge Functions:
+
+- `suggest-addresses` - подсказки адресов по России;
+- `send-auth-email` - письма с кодами доступа;
+- `telegram-auth` - вход и подтверждение через Telegram;
+- `estimate-signature-otp` - проверка клиента перед подписью;
+- `estimate-approval` - публичная страница принятия сметы по QR-ссылке.
+
+## Структура
+
+```text
+lib/src/
+  features/       # экраны и пользовательские сценарии
+  data/           # Supabase, PDF, экспорт, кэш и офлайн-синхронизация
+  shared/         # общие UI-компоненты и форматтеры
+  core/           # тема, конфигурация и контроллеры
+supabase/
+  migrations/     # схема БД и RLS
+  functions/      # Edge Functions
+docs/screenshots/ # скриншоты для README
+scripts/          # сборка Cloudflare Pages
+```
+
+## Что дальше
+
+- офлайн-очередь для операций по объектам и правок неподписанных черновиков;
+- боевой биллинг Профи и серверная проверка платежей;
+- шаблоны смет и наборы повторяющихся работ;
+- резервный экспорт данных мастера;
+- публикация Android в Google Play и подготовка iOS-релиза.
+
+---
+
+<p align="center"><b>Сметчик</b> - меньше таблиц, больше работы на объекте.</p>
