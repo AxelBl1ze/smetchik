@@ -219,31 +219,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 estimates: items,
                 busy: _saving,
                 onTap: () => _showTariffSheet(value),
+                onRedeem: _showPromoCodeSheet,
               ),
               loading: () => _SubscriptionCard(
                 profile: value,
                 estimates: const [],
                 busy: true,
                 onTap: () => _showTariffSheet(value),
+                onRedeem: _showPromoCodeSheet,
               ),
               error: (_, _) => _SubscriptionCard(
                 profile: value,
                 estimates: const [],
                 busy: _saving,
                 onTap: () => _showTariffSheet(value),
+                onRedeem: _showPromoCodeSheet,
               ),
-            ),
-            const SizedBox(height: 14),
-            _SubscriptionTestPanel(
-              profile: value,
-              busy: _saving,
-              onActivate: () => _activateMockPro(days: 30),
-              onExtend: () => _activateMockPro(
-                days: 30,
-                message: 'Профи продлён тестово на 30 дней',
-              ),
-              onExpire: _expireMockSubscription,
-              onBasic: _switchToBasicPlan,
             ),
             const SizedBox(height: 14),
             _PdfSettingsLauncherCard(
@@ -541,88 +532,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _changePlan(String plan) async {
     if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.pro) {
-      await _showMockCheckoutSheet();
+      await _showPromoCodeSheet();
       return;
     }
-    await _switchToBasicPlan();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Базовый тариф включится автоматически после окончания Профи.',
+        ),
+      ),
+    );
   }
 
-  Future<void> _showMockCheckoutSheet() async {
+  Future<void> _showPromoCodeSheet() async {
     if (_saving) return;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => _MockCheckoutSheet(
-        onPay: () {
-          Navigator.of(sheetContext).pop();
-          _activateMockPro(
-            days: 30,
-            message: 'Оплата прошла в тестовом режиме. Профи включён.',
-          );
-        },
-      ),
+      builder: (sheetContext) => _PromoCodeSheet(onApply: _redeemPromo),
     );
   }
 
-  Future<void> _activateMockPro({
-    required int days,
-    String message = 'Профи подключён тестово на 30 дней',
-  }) async {
-    if (_saving) return;
+  Future<bool> _redeemPromo(String code) async {
+    if (_saving) return false;
     setState(() => _saving = true);
     try {
-      await ref.read(repositoryProvider).activateMockPro(days: days);
+      final result = await ref.read(repositoryProvider).redeemPromo(code: code);
       ref.invalidate(profileProvider);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _switchToBasicPlan() async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      await ref.read(repositoryProvider).switchToBasicPlan();
-      ref.invalidate(profileProvider);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Включён Базовый тариф')));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  Future<void> _expireMockSubscription() async {
-    if (_saving) return;
-    setState(() => _saving = true);
-    try {
-      await ref.read(repositoryProvider).expireMockSubscription();
-      ref.invalidate(profileProvider);
-      if (!mounted) return;
+      if (!mounted) return false;
+      final date = result.renewsAt == null
+          ? null
+          : formatDate(result.renewsAt!);
+      final title = result.title?.trim();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Срок Профи истёк для теста')),
+        SnackBar(
+          content: Text(
+            title == null || title.isEmpty
+                ? 'Профи активирован${date == null ? '' : ' до $date'}'
+                : '$title активирован${date == null ? '' : ' до $date'}',
+          ),
+        ),
       );
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -3676,12 +3635,14 @@ class _SubscriptionCard extends StatelessWidget {
     required this.estimates,
     required this.busy,
     required this.onTap,
+    required this.onRedeem,
   });
 
   final ProfileModel? profile;
   final List<EstimateModel> estimates;
   final bool busy;
   final VoidCallback onTap;
+  final VoidCallback onRedeem;
 
   @override
   Widget build(BuildContext context) {
@@ -3783,7 +3744,155 @@ class _SubscriptionCard extends StatelessWidget {
             icon: const Icon(Icons.tune),
             label: const Text('Тарифы'),
           ),
+          TextButton.icon(
+            onPressed: busy ? null : onRedeem,
+            icon: const Icon(Icons.confirmation_number_outlined, size: 18),
+            label: const Text('Промокод'),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _PromoCodeSheet extends StatefulWidget {
+  const _PromoCodeSheet({required this.onApply});
+
+  final Future<bool> Function(String code) onApply;
+
+  @override
+  State<_PromoCodeSheet> createState() => _PromoCodeSheetState();
+}
+
+class _PromoCodeSheetState extends State<_PromoCodeSheet> {
+  final _code = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _apply() async {
+    final value = _code.text.trim();
+    if (value.length < 4 || _busy) return;
+    setState(() => _busy = true);
+    final applied = await widget.onApply(value);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (applied) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, bottom + 16),
+      child: SafeArea(
+        top: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Material(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: AppColors.orangeLight,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(
+                            Icons.confirmation_number_outlined,
+                            color: AppColors.orangeDark,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Активировать промокод',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Доступ Профи появится сразу после проверки',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Закрыть',
+                          onPressed: _busy
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: _code,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.characters,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _apply(),
+                      decoration: const InputDecoration(
+                        labelText: 'Промокод',
+                        hintText: 'Например, PRO2026',
+                        prefixIcon: Icon(Icons.local_offer_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Промокод можно использовать один раз в одном аккаунте.',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: _busy ? null : _apply,
+                      icon: _busy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.workspace_premium_outlined),
+                      label: const Text('Активировать Профи'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -3883,6 +3992,8 @@ class _SubscriptionChip extends StatelessWidget {
   }
 }
 
+// Legacy test surface kept temporarily for a future admin-only QA build.
+// ignore: unused_element
 class _SubscriptionTestPanel extends StatelessWidget {
   const _SubscriptionTestPanel({
     required this.profile,
@@ -4168,6 +4279,8 @@ class _TariffSheetDragHandleState extends State<_TariffSheetDragHandle> {
   }
 }
 
+// Legacy visual prototype kept outside the application flow.
+// ignore: unused_element
 class _MockCheckoutSheet extends StatelessWidget {
   const _MockCheckoutSheet({required this.onPay});
 

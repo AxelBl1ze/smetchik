@@ -148,49 +148,16 @@ class SmetchikRepository {
         .eq('id', _userId);
   }
 
-  Future<void> updateSubscriptionPlan(String plan) async {
-    if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.pro) {
-      return activateMockPro();
-    }
-    return switchToBasicPlan();
-  }
-
-  Future<void> activateMockPro({int days = 30}) async {
-    final renewsAt = DateTime.now().toUtc().add(Duration(days: days));
-    await _client
-        .from('profiles')
-        .update({
-          'subscription_plan': SubscriptionPlan.pro,
-          'subscription_status': SubscriptionStatus.active,
-          'subscription_source': SubscriptionSource.mock,
-          'subscription_renews_at': renewsAt.toIso8601String(),
-        })
-        .eq('id', _userId);
-  }
-
-  Future<void> switchToBasicPlan() async {
-    await _client
-        .from('profiles')
-        .update({
-          'subscription_plan': SubscriptionPlan.basic,
-          'subscription_status': SubscriptionStatus.active,
-          'subscription_source': SubscriptionSource.mock,
-          'subscription_renews_at': null,
-        })
-        .eq('id', _userId);
-  }
-
-  Future<void> expireMockSubscription() async {
-    final expiredAt = DateTime.now().toUtc().subtract(const Duration(days: 1));
-    await _client
-        .from('profiles')
-        .update({
-          'subscription_plan': SubscriptionPlan.pro,
-          'subscription_status': SubscriptionStatus.pastDue,
-          'subscription_source': SubscriptionSource.mock,
-          'subscription_renews_at': expiredAt.toIso8601String(),
-        })
-        .eq('id', _userId);
+  Future<PromoRedemptionResult> redeemPromo({required String code}) async {
+    final response = await _client.functions.invoke(
+      'redeem-promo',
+      body: {'code': code.trim()},
+    );
+    final data = _functionData(response.data);
+    return PromoRedemptionResult(
+      title: data['title'] as String?,
+      renewsAt: asDateOrNull(data['renewsAt']),
+    );
   }
 
   String? logoPublicUrl(String? path) {

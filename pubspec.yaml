@@ -46,6 +46,7 @@ dependencies:
   uuid: ^4.5.3
   image_picker: ^1.2.2
   excel_plus: ^0.0.4
+  web: ^1.1.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -274,6 +274,8 @@ class SubscriptionSource {
   static const web = 'web';
   static const googlePlay = 'google_play';
   static const apple = 'apple';
+  static const promo = 'promo';
+  static const admin = 'admin';
 
   static String normalize(String? value) {
     return switch ((value ?? '').trim()) {
@@ -281,6 +283,8 @@ class SubscriptionSource {
       web => web,
       googlePlay => googlePlay,
       apple => apple,
+      promo => promo,
+      admin => admin,
       _ => manual,
     };
   }
@@ -291,9 +295,18 @@ class SubscriptionSource {
       web => 'сайт',
       googlePlay => 'Google Play',
       apple => 'App Store',
+      promo => 'промокод',
+      admin => 'выдано поддержкой',
       _ => 'вручную',
     };
   }
+}
+
+class PromoRedemptionResult {
+  const PromoRedemptionResult({required this.title, required this.renewsAt});
+
+  final String? title;
+  final DateTime? renewsAt;
 }
 
 class PdfTemplate {

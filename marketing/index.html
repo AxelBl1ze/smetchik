@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Сметчик - быстрые профессиональные сметы для мастеров и строительных команд."
+    >
+    <meta name="theme-color" content="#171717">
+    <title>Сметчик - смета за пару минут</title>
+    <link
+      rel="icon"
+      href="assets/brand/smetchik_icon.svg"
+      type="image/svg+xml"
+    >
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main>
+      <section class="hero" id="top">
+        <nav class="nav container" aria-label="Основная навигация">
+          <a class="brand" href="#top" aria-label="Сметчик">
+            <span class="brand-mark"
+              ><img src="assets/brand/smetchik_icon.svg" alt=""
+            ></span>
+            <span>Сметчик</span>
+          </a>
+          <button
+            class="menu-button"
+            type="button"
+            aria-expanded="false"
+            aria-controls="nav-links"
+          >
+            <span></span><span></span>
+            <span class="visually-hidden">Открыть меню</span>
+          </button>
+          <div class="nav-links" id="nav-links">
+            <a href="#workflow">Как работает</a>
+            <a href="#pro">Возможности</a>
+            <a href="#tariffs">Тарифы</a>
+            <a class="nav-login" href="https://smetchik.pages.dev">Войти</a>
+            <a class="nav-cta" href="https://smetchik.pages.dev"
+              >Открыть Сметчик <span aria-hidden="true">→</span></a
+            >
+          </div>
+        </nav>
+
+        <div class="hero-scene" aria-hidden="true">
+          <div class="scene-grid"></div>
+          <div class="measure-line measure-line-one"></div>
+          <div class="measure-line measure-line-two"></div>
+          <div class="scene-label label-one">объект · 12:40</div>
+          <div class="scene-label label-two">готово к отправке</div>
+        </div>
+
+        <div class="container hero-content">
+          <div class="hero-copy reveal">
+            <p class="eyebrow"><span></span> Инструмент мастера</p>
+            <h1>Сметчик</h1>
+            <p class="hero-lead">
+              Составляйте понятные сметы прямо на объекте. Клиент получает
+              аккуратный PDF, вы получаете порядок в работе и деньгах.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://smetchik.pages.dev"
+                >Создать первую смету <span aria-hidden="true">↗</span></a
+              >
+              <a class="button button-quiet" href="#workflow"
+                >Посмотреть как работает <span aria-hidden="true">↓</span></a
+              >
+            </div>
+            <div class="hero-proof">
+              <div><strong>3–5 мин</strong><span>на смету</span></div>
+              <div><strong>PDF</strong><span>с подписью</span></div>
+              <div><strong>₽</strong><span>для рынка РФ</span></div>
+            </div>
+          </div>
+
+          <div class="hero-product reveal" data-depth="8">
+            <div class="device-shadow"></div>
+            <div class="phone">
+              <div class="phone-top">
+                <span>9:41</span><span class="phone-island"></span
+                ><span>●●●</span>
+              </div>
+              <div class="app-top">
+                <span class="app-logo">С</span><span>Сметчик</span
+                ><span class="avatar">И</span>
+              </div>
+              <div class="app-body">
+                <p class="tiny-kicker">ДОБРЫЙ ДЕНЬ, ИЛЬЯ</p>
+                <h2>Работа под контролем</h2>
+                <div class="dashboard-number">
+                  <span>В работе</span><strong>248 000 ₽</strong
+                  ><small>3 активные сметы</small>
+                </div>
+                <div class="new-estimate">
+                  <span>+</span><strong>Новая смета</strong>
+                </div>
+                <div class="estimate-card">
+                  <span class="tag tag-work">В работе</span
+                  ><strong>Дом на Южной</strong
+                  ><small>Александр · 78 000 ₽</small>
+                </div>
+                <div class="estimate-card muted">
+                  <span class="tag tag-sent">Отправлена</span
+                  ><strong>Квартира 54</strong><small>Мария · 42 500 ₽</small>
+                </div>
+              </div>
+              <div class="app-nav">
+                <span class="active">⌂<small>Главная</small></span
+                ><span>▤<small>Сметы</small></span
+                ><span>⚒<small>Прайс</small></span
+                ><span>◌<small>Клиенты</small></span>
+              </div>
+            </div>
+            <div class="floating-card card-approved">
+              <span>✓</span>
+              <div>
+                <b>Смета принята</b><small>Клиент подписал документ</small>
+              </div>
+            </div>
+            <div class="floating-card card-pdf">
+              <span>PDF</span>
+              <div>
+                <b>Коммерческое предложение</b><small>Готово к отправке</small>
+              </div>
+            </div>
+          </div>
+        </div>
+        <a class="hero-scroll" href="#workflow"><span></span>Листайте дальше</a>
+      </section>
+
+      <section class="workflow section" id="workflow">
+        <div class="container">
+          <div class="section-head reveal">
+            <p class="eyebrow eyebrow-dark">
+              <span></span> Без лишней бухгалтерии
+            </p>
+            <h2>От первого слова до подписи клиента</h2>
+            <p>
+              Рабочий маршрут собран так, чтобы мастер не тратил время на
+              таблицы, файлы и пересчёты.
+            </p>
+          </div>
+          <div class="workflow-grid">
+            <article class="workflow-item reveal">
+              <span class="step">01</span>
+              <span class="workflow-icon">⌁</span>
+              <h3>Выберите работы</h3>
+              <p>
+                Прайс-лист с разделами, поиском и своими услугами всегда под
+                рукой.
+              </p>
+            </article>
+            <article class="workflow-item reveal">
+              <span class="step">02</span>
+              <span class="workflow-icon">₽</span>
+              <h3>Соберите смету</h3>
+              <p>
+                Количество, сроки и итог считаются автоматически. Всё видно
+                сразу.
+              </p>
+            </article>
+            <article class="workflow-item reveal">
+              <span class="step">03</span>
+              <span class="workflow-icon">↗</span>
+              <h3>Отправьте PDF</h3>
+              <p>
+                Клиент открывает документ, подтверждает его и оставляет подпись.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="pro section" id="pro">
+        <div class="container pro-layout">
+          <div class="pro-console reveal">
+            <div class="console-bar">
+              <i></i><i></i><i></i><span>Сметчик / объект</span>
+            </div>
+            <div class="console-body">
+              <div class="console-title">
+                <div><small>ОБЪЕКТ</small><b>Дом на Южной</b></div>
+                <span class="status-pill">В работе</span>
+              </div>
+              <div class="finance-row">
+                <div><small>Поступило</small><b>420 000 ₽</b></div>
+                <div><small>Затраты</small><b>186 400 ₽</b></div>
+                <div><small>Остаток</small><b class="green">233 600 ₽</b></div>
+              </div>
+              <div class="console-chart">
+                <span class="chart-bar-1"></span><span class="chart-bar-2"></span
+                ><span class="chart-bar-3"></span><span class="chart-bar-4"></span
+                ><span class="chart-bar-5"></span><span class="chart-bar-6"></span
+                ><span class="chart-bar-7"></span>
+              </div>
+            </div>
+          </div>
+          <div class="pro-copy reveal">
+            <p class="eyebrow eyebrow-dark">
+              <span></span> Когда смет становится больше
+            </p>
+            <h2>Не только считать, но и понимать прибыль</h2>
+            <p>
+              Профи добавляет всё, что помогает держать стройку и клиентов в
+              порядке, а не в голове.
+            </p>
+            <ul class="feature-list">
+              <li><span>✓</span> Неограниченные сметы, клиенты и объекты</li>
+              <li>
+                <span>✓</span> Настраиваемый PDF: логотип, подпись, QR и стиль
+              </li>
+              <li><span>✓</span> Учёт поступлений и затрат по объектам</li>
+              <li>
+                <span>✓</span> Расширенная статистика и экспорт документов
+              </li>
+            </ul>
+            <a class="text-link" href="#tariffs"
+              >Посмотреть тарифы <span>→</span></a
+            >
+          </div>
+        </div>
+      </section>
+
+      <section class="security section">
+        <div class="container security-band reveal">
+          <div class="security-icon">⌘</div>
+          <div>
+            <h2>Документы остаются документами</h2>
+            <p>
+              Подписанная смета хранит версию, время подтверждения и данные
+              подписания. После принятия её нельзя незаметно изменить.
+            </p>
+          </div>
+          <a class="button button-dark" href="https://smetchik.pages.dev"
+            >Попробовать в деле <span>↗</span></a
+          >
+        </div>
+      </section>
+
+      <section class="tariffs section" id="tariffs">
+        <div class="container">
+          <div class="section-head center reveal">
+            <p class="eyebrow eyebrow-dark"><span></span> Простые условия</p>
+            <h2>Начните бесплатно. Вырастете — подключите Профи.</h2>
+          </div>
+          <div class="tariff-grid">
+            <article class="tariff-card reveal">
+              <div class="tariff-top">
+                <span>Базовый</span><b>0 ₽</b><small>навсегда</small>
+              </div>
+              <p>Для первых объектов и первых клиентов.</p>
+              <ul>
+                <li>До 10 смет в месяц</li>
+                <li>До 20 клиентов</li>
+                <li>Один активный объект</li>
+                <li>Стандартный PDF</li>
+              </ul>
+              <a class="button button-outline" href="https://smetchik.pages.dev"
+                >Начать бесплатно</a
+              >
+            </article>
+            <article class="tariff-card tariff-pro reveal">
+              <div class="tariff-badge">Для активной работы</div>
+              <div class="tariff-top">
+                <span>Профи</span><b>399 ₽</b><small>в месяц</small>
+              </div>
+              <p>Когда сметы и объекты стали вашей ежедневной работой.</p>
+              <ul>
+                <li>Безлимитные сметы и клиенты</li>
+                <li>Брендированный PDF и QR оплаты</li>
+                <li>Учёт прибыли по объектам</li>
+                <li>Экспорт в PDF и Excel</li>
+              </ul>
+              <a class="button button-primary" href="https://smetchik.pages.dev"
+                >Открыть Профи <span>↗</span></a
+              >
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="final-cta section">
+        <div class="container final-inner reveal">
+          <p class="eyebrow"><span></span> Ваш следующий объект</p>
+          <h2>Смета должна помогать заработать, а не забирать вечер.</h2>
+          <a class="button button-primary" href="https://smetchik.pages.dev"
+            >Открыть Сметчик <span>↗</span></a
+          >
+        </div>
+      </section>
+    </main>
+    <footer class="footer">
+      <div class="container footer-inner">
+        <a class="brand" href="#top"
+          ><span class="brand-mark"
+            ><img src="assets/brand/smetchik_icon.svg" alt=""></span
+          ><span>Сметчик</span></a
+        ><span>© <span id="year"></span> Сметчик</span
+        ><a href="https://smetchik.pages.dev">Приложение</a>
+      </div>
+    </footer>
+    <script src="app.js"></script>
+  </body>
+</html>
