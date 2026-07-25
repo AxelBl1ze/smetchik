@@ -635,7 +635,7 @@ class _AdminNavItem extends StatelessWidget {
   }
 }
 
-class _AdminContent extends StatelessWidget {
+class _AdminContent extends StatefulWidget {
   const _AdminContent({
     required this.section,
     required this.api,
@@ -653,17 +653,47 @@ class _AdminContent extends StatelessWidget {
   final Future<void> Function() onRefresh;
 
   @override
+  State<_AdminContent> createState() => _AdminContentState();
+}
+
+class _AdminContentState extends State<_AdminContent> {
+  final Map<_AdminSection, Widget> _cachedTabs = {};
+
+  Widget _tabFor(_AdminSection section, Map<String, dynamic> operator) {
+    if (section == _AdminSection.overview) {
+      return _DashboardView(
+        dashboard: widget.dashboard,
+        loading: widget.loading,
+      );
+    }
+
+    return _cachedTabs.putIfAbsent(section, () {
+      final isOwner = _fallback(operator['role'], 'owner') == 'owner';
+      return switch (section) {
+        _AdminSection.users => _UsersView(
+          api: widget.api,
+          canManageAdmins: isOwner,
+          currentAdminId: _fallback(operator['id'], ''),
+        ),
+        _AdminSection.promos => _PromosView(api: widget.api),
+        _AdminSection.signatures => _SignaturesView(api: widget.api),
+        _AdminSection.audit => _AuditView(api: widget.api),
+        _AdminSection.overview => throw StateError('Обзор создаётся отдельно.'),
+      };
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final operator = _record(dashboard?['operator']);
-    final isOwner = _fallback(operator['role'], 'owner') == 'owner';
-    final title = switch (section) {
+    final operator = _record(widget.dashboard?['operator']);
+    final title = switch (widget.section) {
       _AdminSection.overview => 'Обзор',
       _AdminSection.users => 'Пользователи',
       _AdminSection.promos => 'Промокоды',
       _AdminSection.signatures => 'Подписанные сметы',
       _AdminSection.audit => 'Журнал действий',
     };
-    final subtitle = switch (section) {
+    final subtitle = switch (widget.section) {
       _AdminSection.overview => 'Состояние сервиса и последние события',
       _AdminSection.users => 'Тарифы, блокировки и служебные доступы',
       _AdminSection.promos => 'Выдача Профи без подключения оплаты',
@@ -703,12 +733,15 @@ class _AdminContent extends StatelessWidget {
                       ],
                     ),
                   ),
-                  _AdminRefreshButton(enabled: !loading, onTap: onRefresh),
+                  _AdminRefreshButton(
+                    enabled: !widget.loading,
+                    onTap: widget.onRefresh,
+                  ),
                 ],
               ),
             ),
           ),
-          if (error != null)
+          if (widget.error != null)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -716,31 +749,36 @@ class _AdminContent extends StatelessWidget {
                   icon: Icons.lock_outline,
                   color: AppColors.danger,
                   background: AppColors.dangerBg,
-                  text: error!,
+                  text: widget.error!,
                 ),
               ),
             ),
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
-            sliver: SliverToBoxAdapter(
-              child: switch (section) {
-                _AdminSection.overview => _DashboardView(
-                  dashboard: dashboard,
-                  loading: loading,
-                ),
-                _AdminSection.users => _UsersView(
-                  api: api,
-                  canManageAdmins: isOwner,
-                  currentAdminId: _fallback(operator['id'], ''),
-                ),
-                _AdminSection.promos => _PromosView(api: api),
-                _AdminSection.signatures => _SignaturesView(api: api),
-                _AdminSection.audit => _AuditView(api: api),
-              },
-            ),
+            sliver: SliverToBoxAdapter(child: _cachedBody(operator)),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _cachedBody(Map<String, dynamic> operator) {
+    _cachedTabs[_AdminSection.overview] = _tabFor(
+      _AdminSection.overview,
+      operator,
+    );
+    _tabFor(widget.section, operator);
+    final sections = _cachedTabs.keys.toList(growable: false);
+    return IndexedStack(
+      index: sections.indexOf(widget.section),
+      children: sections
+          .map(
+            (section) => KeyedSubtree(
+              key: PageStorageKey('admin-${section.name}'),
+              child: _cachedTabs[section]!,
+            ),
+          )
+          .toList(growable: false),
     );
   }
 }
