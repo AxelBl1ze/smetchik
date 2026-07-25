@@ -337,6 +337,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_saving) return;
     final pick = await showModalBottomSheet<bool>(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const _AvatarPickerSheet(),
     );
@@ -349,6 +350,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_saving) return;
     final bytes = await showModalBottomSheet<Uint8List>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       isDismissible: false,
       enableDrag: false,
@@ -427,6 +429,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _SettingsFeatureSheet(
@@ -447,6 +450,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _showPdfSettingsSheet(ProfileModel? profile) async {
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => StatefulBuilder(
@@ -515,6 +519,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_saving) return;
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       isDismissible: true,
       enableDrag: true,
@@ -549,6 +554,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (_saving) return;
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _PromoCodeSheet(onApply: _redeemPromo),

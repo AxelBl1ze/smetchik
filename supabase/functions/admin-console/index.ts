@@ -48,6 +48,8 @@ Deno.serve(async (request) => {
         return json(await setPromoActive(context, body));
       case 'grant_subscription':
         return json(await grantSubscription(context, body));
+      case 'revoke_subscription':
+        return json(await revokeSubscription(context, body));
       case 'signed_estimates':
         return json(await signedEstimates(context, body));
       case 'evidence':
@@ -174,7 +176,7 @@ async function promos(context: AdminContext): Promise<JsonRecord> {
   const response = await context.admin
     .from('promo_codes')
     .select(
-      'id,code_hint,title,plan,grant_days,max_redemptions,redemption_count,starts_at,expires_at,is_active,disabled_at,created_at',
+      'id,code_hint,code_value,title,plan,grant_days,max_redemptions,redemption_count,starts_at,expires_at,is_active,disabled_at,created_at',
     )
     .order('created_at', { ascending: false })
     .limit(100);
@@ -201,6 +203,7 @@ async function createPromo(
   const response = await context.admin.from('promo_codes').insert({
     code_hash: codeHash,
     code_hint: maskPromo(rawCode),
+    code_value: rawCode,
     title: title.slice(0, 120),
     plan: 'pro',
     grant_days: grantDays,
@@ -208,7 +211,7 @@ async function createPromo(
     starts_at: startsAt,
     expires_at: expiresAt,
     created_by: context.user.id,
-  }).select('id,code_hint,title,grant_days,max_redemptions,starts_at,expires_at,is_active').single();
+  }).select('id,code_hint,code_value,title,grant_days,max_redemptions,starts_at,expires_at,is_active').single();
   if (response.error) {
     if (response.error.code === '23505') {
       throw new HttpError('Такой промокод уже существует. Выберите другой.', 409);
@@ -283,6 +286,31 @@ async function grantSubscription(
     renewsAt,
   });
   return { userId, plan: 'pro', renewsAt };
+}
+
+async function revokeSubscription(
+  context: AdminContext,
+  body: JsonRecord,
+): Promise<JsonRecord> {
+  const userId = requiredUuid(body.userId, 'пользователя');
+  const update = await context.admin
+    .from('profiles')
+    .update({
+      subscription_plan: 'basic',
+      subscription_status: 'active',
+      subscription_source: 'admin',
+      subscription_renews_at: null,
+    })
+    .eq('id', userId)
+    .select('id')
+    .maybeSingle();
+  if (update.error) throw update.error;
+  if (!update.data) throw new HttpError('Профиль пользователя не найден.', 404);
+
+  await logEvent(context, 'subscription_revoked', 'profile', userId, {
+    plan: 'basic',
+  });
+  return { userId, plan: 'basic', renewsAt: null };
 }
 
 async function signedEstimates(

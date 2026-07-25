@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -147,11 +148,12 @@ class _AdminLoginState extends State<_AdminLogin> {
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1040),
-                child: DecoratedBox(
+                constraints: const BoxConstraints(maxWidth: 960),
+                child: Container(
+                  clipBehavior: Clip.antiAlias,
                   decoration: BoxDecoration(
                     color: AppColors.card,
-                    borderRadius: BorderRadius.circular(28),
+                    borderRadius: BorderRadius.circular(24),
                     boxShadow: const [
                       BoxShadow(
                         color: Color(0x33000000),
@@ -164,87 +166,93 @@ class _AdminLoginState extends State<_AdminLogin> {
                     builder: (context, constraints) {
                       final narrow = constraints.maxWidth < 720;
                       final form = Padding(
-                        padding: const EdgeInsets.all(28),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const _AdminMark(dark: false),
-                            const SizedBox(height: 34),
-                            const Text(
-                              'Вход в управление',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Доступ есть только у назначенных администраторов.',
-                              style: TextStyle(
-                                color: AppColors.textSecondary,
-                                height: 1.4,
-                              ),
-                            ),
-                            const SizedBox(height: 22),
-                            TextField(
-                              controller: _email,
-                              autofillHints: const [AutofillHints.username],
-                              keyboardType: TextInputType.emailAddress,
-                              textInputAction: TextInputAction.next,
-                              decoration: const InputDecoration(
-                                labelText: 'Email администратора',
-                                prefixIcon: Icon(Icons.alternate_email),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextField(
-                              controller: _password,
-                              obscureText: _obscure,
-                              autofillHints: const [AutofillHints.password],
-                              onSubmitted: (_) => _submit(),
-                              decoration: InputDecoration(
-                                labelText: 'Пароль',
-                                prefixIcon: const Icon(Icons.lock_outline),
-                                suffixIcon: IconButton(
-                                  tooltip: _obscure
-                                      ? 'Показать пароль'
-                                      : 'Скрыть пароль',
-                                  onPressed: () =>
-                                      setState(() => _obscure = !_obscure),
-                                  icon: Icon(
-                                    _obscure
-                                        ? Icons.visibility_outlined
-                                        : Icons.visibility_off_outlined,
+                        padding: const EdgeInsets.all(36),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 470),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const _AdminMark(dark: false),
+                                const SizedBox(height: 30),
+                                const Text(
+                                  'Вход в админку',
+                                  style: TextStyle(
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.w900,
                                   ),
                                 ),
-                              ),
-                            ),
-                            if (_error != null) ...[
-                              const SizedBox(height: 14),
-                              _AdminNotice(
-                                icon: Icons.error_outline,
-                                color: AppColors.danger,
-                                background: AppColors.dangerBg,
-                                text: _error!,
-                              ),
-                            ],
-                            const SizedBox(height: 20),
-                            FilledButton.icon(
-                              onPressed: _busy ? null : _submit,
-                              icon: _busy
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Доступ есть только у назначенных администраторов.',
+                                  style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                TextField(
+                                  controller: _email,
+                                  autofillHints: const [AutofillHints.username],
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Email администратора',
+                                    prefixIcon: Icon(Icons.alternate_email),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _password,
+                                  obscureText: _obscure,
+                                  autofillHints: const [AutofillHints.password],
+                                  onSubmitted: (_) => _submit(),
+                                  decoration: InputDecoration(
+                                    labelText: 'Пароль',
+                                    prefixIcon: const Icon(Icons.lock_outline),
+                                    suffixIcon: IconButton(
+                                      tooltip: _obscure
+                                          ? 'Показать пароль'
+                                          : 'Скрыть пароль',
+                                      onPressed: () =>
+                                          setState(() => _obscure = !_obscure),
+                                      icon: Icon(
+                                        _obscure
+                                            ? Icons.visibility_outlined
+                                            : Icons.visibility_off_outlined,
                                       ),
-                                    )
-                                  : const Icon(Icons.login),
-                              label: const Text('Войти в админку'),
+                                    ),
+                                  ),
+                                ),
+                                if (_error != null) ...[
+                                  const SizedBox(height: 14),
+                                  _AdminNotice(
+                                    icon: Icons.error_outline,
+                                    color: AppColors.danger,
+                                    background: AppColors.dangerBg,
+                                    text: _error!,
+                                  ),
+                                ],
+                                const SizedBox(height: 20),
+                                FilledButton.icon(
+                                  onPressed: _busy ? null : _submit,
+                                  icon: _busy
+                                      ? const SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(Icons.login),
+                                  label: const Text('Войти в админку'),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       );
                       return narrow
@@ -253,7 +261,7 @@ class _AdminLoginState extends State<_AdminLogin> {
                               children: [
                                 Expanded(child: form),
                                 const SizedBox(
-                                  width: 410,
+                                  width: 360,
                                   child: _AdminLoginSide(),
                                 ),
                               ],
@@ -276,51 +284,79 @@ class _AdminLoginSide extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: const BoxDecoration(
-        color: AppColors.graphite,
-        borderRadius: BorderRadius.horizontal(right: Radius.circular(28)),
-      ),
+      padding: const EdgeInsets.all(30),
+      decoration: const BoxDecoration(color: AppColors.graphite),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           _AdminMark(dark: true),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.admin_panel_settings_outlined,
-                color: AppColors.orange,
-                size: 46,
-              ),
-              SizedBox(height: 16),
-              Text(
-                'Операционная панель',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 27,
-                  height: 1.08,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 10),
-              Text(
-                'Промокоды, доступы и подписанные документы в одном защищённом месте.',
-                style: TextStyle(
-                  color: Color(0xFFD5D2CC),
-                  height: 1.45,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+          SizedBox(height: 52),
+          Icon(
+            Icons.admin_panel_settings_outlined,
+            color: AppColors.orange,
+            size: 46,
           ),
+          SizedBox(height: 16),
+          Text(
+            'Операционная\nпанель',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              height: 1.08,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          SizedBox(height: 12),
+          Text(
+            'Доступы, промокоды и подписанные документы в одном защищённом месте.',
+            style: TextStyle(
+              color: Color(0xFFD5D2CC),
+              height: 1.45,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: 26),
+          _AdminSidePoint(
+            icon: Icons.verified_user_outlined,
+            text: 'Проверка прав',
+          ),
+          SizedBox(height: 12),
+          _AdminSidePoint(
+            icon: Icons.history_outlined,
+            text: 'Журнал действий',
+          ),
+          SizedBox(height: 40),
           Text(
             'Сметчик · служебный доступ',
             style: TextStyle(color: Color(0xFFAAA6A0), fontSize: 12),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AdminSidePoint extends StatelessWidget {
+  const _AdminSidePoint({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.orange),
+        const SizedBox(width: 10),
+        Text(
+          text,
+          style: const TextStyle(
+            color: Color(0xFFD5D2CC),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -956,6 +992,50 @@ class _UsersViewState extends State<_UsersView> {
     }
   }
 
+  Future<void> _revoke(Map<String, dynamic> user) async {
+    final name = _fallback(user['fullName'], 'этого пользователя');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Отключить Профи'),
+        content: Text(
+          '$name вернётся на Базовый тариф. Неиспользованные дни Профи будут сброшены.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Отключить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await widget.api.call(
+        'revoke_subscription',
+        body: {'userId': user['id']},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Пользователь переведён на Базовый тариф'),
+        ),
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_message(error))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -997,7 +1077,11 @@ class _UsersViewState extends State<_UsersView> {
           ..._users.map(
             (user) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: _AdminUserCard(user: user, onGrant: () => _grant(user)),
+              child: _AdminUserCard(
+                user: user,
+                onGrant: () => _grant(user),
+                onRevoke: () => _revoke(user),
+              ),
             ),
           ),
       ],
@@ -1006,10 +1090,15 @@ class _UsersViewState extends State<_UsersView> {
 }
 
 class _AdminUserCard extends StatelessWidget {
-  const _AdminUserCard({required this.user, required this.onGrant});
+  const _AdminUserCard({
+    required this.user,
+    required this.onGrant,
+    required this.onRevoke,
+  });
 
   final Map<String, dynamic> user;
   final VoidCallback onGrant;
+  final VoidCallback onRevoke;
 
   @override
   Widget build(BuildContext context) {
@@ -1072,15 +1161,27 @@ class _AdminUserCard extends StatelessWidget {
               ),
             ],
           );
-          final action = FilledButton.icon(
-            onPressed: onGrant,
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(0, 42),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-            ),
-            icon: const Icon(Icons.workspace_premium_outlined, size: 18),
-            label: const Text('Выдать Профи'),
-          );
+          final action = pro
+              ? OutlinedButton.icon(
+                  onPressed: onRevoke,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    foregroundColor: AppColors.danger,
+                    side: const BorderSide(color: Color(0x33A32D2D)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  icon: const Icon(Icons.remove_circle_outline, size: 18),
+                  label: const Text('Отключить Профи'),
+                )
+              : FilledButton.icon(
+                  onPressed: onGrant,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  icon: const Icon(Icons.workspace_premium_outlined, size: 18),
+                  label: const Text('Выдать Профи'),
+                );
           final status = _PlanPill(
             pro: pro,
             label: pro && renewsAt != null
@@ -1318,6 +1419,7 @@ class _PromoCard extends StatelessWidget {
     final redemptions = _integer(promo['redemption_count']);
     final maximum = _integer(promo['max_redemptions']);
     final expires = _date(promo['expires_at']);
+    final rawCode = _fallback(promo['code_value'], '');
     return SmetchikCard(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1346,16 +1448,22 @@ class _PromoCard extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      '${_fallback(promo['code_hint'], '***')} · ${_integer(promo['grant_days'])} дней Профи',
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
+                    if (rawCode.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 5),
+                        child: _PromoCodeValue(code: rawCode),
+                      )
+                    else
+                      Text(
+                        '${_fallback(promo['code_hint'], '***')} · ${_integer(promo['grant_days'])} дней Профи',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 4),
                     Text(
-                      '$redemptions из $maximum активаций${expires == null ? '' : ' · до ${formatDate(expires)}'}',
+                      '$redemptions из $maximum активаций · ${_integer(promo['grant_days'])} дней Профи${expires == null ? '' : ' · до ${formatDate(expires)}'}',
                       style: const TextStyle(
                         color: AppColors.textHint,
                         fontSize: 12,
@@ -1401,6 +1509,53 @@ class _PromoCard extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _PromoCodeValue extends StatelessWidget {
+  const _PromoCodeValue({required this.code});
+
+  final String code;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.graphite,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () async {
+          await Clipboard.setData(ClipboardData(text: code));
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Промокод скопирован')));
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 7, 8, 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  code,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
+              const Icon(Icons.copy_rounded, color: AppColors.orange, size: 17),
+            ],
+          ),
+        ),
       ),
     );
   }

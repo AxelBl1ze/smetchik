@@ -23,7 +23,6 @@ final offlineSyncProvider = ChangeNotifierProvider<OfflineSyncController>((
     },
   );
   controller.start();
-  ref.onDispose(controller.dispose);
   return controller;
 });
 
@@ -108,6 +107,7 @@ class OfflineSyncController extends ChangeNotifier with WidgetsBindingObserver {
   String? _loadedUserId;
   bool _ready = false;
   bool _syncing = false;
+  bool _disposed = false;
 
   bool get isReady => _ready;
   bool get isSyncing => _syncing;
@@ -122,7 +122,10 @@ class OfflineSyncController extends ChangeNotifier with WidgetsBindingObserver {
   void start() {
     WidgetsBinding.instance.addObserver(this);
     _retryTimer = Timer.periodic(_retryInterval, (_) => sync());
-    unawaited(ensureLoaded().then((_) => sync()));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed) return;
+      unawaited(ensureLoaded().then((_) => sync()));
+    });
   }
 
   @override
@@ -336,6 +339,7 @@ class OfflineSyncController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _disposed = true;
     WidgetsBinding.instance.removeObserver(this);
     _retryTimer?.cancel();
     super.dispose();

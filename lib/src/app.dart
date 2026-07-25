@@ -199,16 +199,40 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return router;
 });
 
-class SmetchikApp extends ConsumerWidget {
+class SmetchikApp extends ConsumerStatefulWidget {
   const SmetchikApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(authControllerProvider);
-    if (auth.isLoggedIn) {
-      final offlineSync = ref.watch(offlineSyncProvider);
-      unawaited(offlineSync.ensureLoaded());
-    }
+  ConsumerState<SmetchikApp> createState() => _SmetchikAppState();
+}
+
+class _SmetchikAppState extends ConsumerState<SmetchikApp> {
+  bool _offlineRefreshQueued = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual<AuthController>(
+      authControllerProvider,
+      (_, _) => _queueOfflineRefresh(),
+      fireImmediately: true,
+    );
+  }
+
+  void _queueOfflineRefresh() {
+    if (_offlineRefreshQueued) return;
+    _offlineRefreshQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _offlineRefreshQueued = false;
+      if (!mounted) return;
+      final offlineSync = ref.read(offlineSyncProvider);
+      unawaited(offlineSync.ensureLoaded().then((_) => offlineSync.sync()));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(authControllerProvider);
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
       title: 'Сметчик',

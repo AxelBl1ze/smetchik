@@ -19,7 +19,10 @@ class AuthController extends ChangeNotifier {
       if (event.event == AuthChangeEvent.passwordRecovery) {
         isPasswordRecovery = true;
       }
-      user = event.session?.user;
+      if (event.event == AuthChangeEvent.signedOut) {
+        isPasswordRecovery = false;
+      }
+      user = event.session?.user ?? _client!.auth.currentUser;
       notifyListeners();
     });
   }
@@ -51,6 +54,12 @@ class AuthController extends ChangeNotifier {
     required String privacyVersion,
   }) async {
     await _run(() async {
+      // Registration is only reachable for signed-out users. Clear any stale
+      // local session before creating a new account so sessions cannot cross.
+      if (_client!.auth.currentSession != null) {
+        await _client!.auth.signOut(scope: SignOutScope.local);
+        user = null;
+      }
       final response = await _client!.auth.signUp(
         email: email.trim(),
         password: password,
@@ -66,12 +75,25 @@ class AuthController extends ChangeNotifier {
           'Аккаунт создан. Если включено подтверждение email, проверьте почту и затем войдите.',
         );
       }
+      if (response.session != null) {
+        final signedUpEmail = response.session!.user.email
+            ?.trim()
+            .toLowerCase();
+        if (signedUpEmail != email.trim().toLowerCase()) {
+          throw const AuthException(
+            'Не удалось подтвердить сессию нового аккаунта. Войдите ещё раз.',
+          );
+        }
+        user = response.session!.user;
+      }
     });
   }
 
   Future<void> signOut() async {
     await _run(() async {
-      await _client!.auth.signOut();
+      await _client!.auth.signOut(scope: SignOutScope.local);
+      user = null;
+      isPasswordRecovery = false;
     });
   }
 
