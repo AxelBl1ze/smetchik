@@ -712,10 +712,15 @@ class _AdminContent extends StatelessWidget {
                       ],
                     ),
                   ),
-                  IconButton.filledTonal(
-                    tooltip: 'Обновить',
+                  IconButton.outlined(
+                    tooltip: 'Обновить данные',
                     onPressed: loading ? null : onRefresh,
-                    icon: const Icon(Icons.refresh),
+                    style: IconButton.styleFrom(
+                      foregroundColor: AppColors.graphite,
+                      backgroundColor: AppColors.card,
+                      side: const BorderSide(color: AppColors.border),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded),
                   ),
                 ],
               ),
@@ -1002,22 +1007,13 @@ class _UsersViewState extends State<_UsersView> {
     final name = _fallback(user['fullName'], 'этого пользователя');
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Отключить Профи'),
-        content: Text(
-          '$name вернётся на Базовый тариф. Неиспользованные дни Профи будут сброшены.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Отключить'),
-          ),
-        ],
+      builder: (context) => _AdminConfirmDialog(
+        icon: Icons.workspace_premium_outlined,
+        title: 'Отключить Профи',
+        description:
+            '$name вернётся на Базовый тариф. Неиспользованные дни Профи будут сброшены.',
+        confirmLabel: 'Отключить',
+        danger: true,
       ),
     );
     if (confirmed != true) return;
@@ -1046,30 +1042,16 @@ class _UsersViewState extends State<_UsersView> {
     final name = _fallback(user['fullName'], 'этого пользователя');
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          blocked
-              ? 'Заблокировать пользователя'
-              : 'Разблокировать пользователя',
-        ),
-        content: Text(
-          blocked
-              ? '$name не сможет войти в Сметчик, пока вы не снимете блокировку.'
-              : '$name снова сможет войти в Сметчик.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            style: blocked
-                ? FilledButton.styleFrom(backgroundColor: AppColors.danger)
-                : null,
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(blocked ? 'Заблокировать' : 'Разблокировать'),
-          ),
-        ],
+      builder: (context) => _AdminConfirmDialog(
+        icon: blocked ? Icons.block_outlined : Icons.lock_open_rounded,
+        title: blocked
+            ? 'Заблокировать пользователя'
+            : 'Разблокировать пользователя',
+        description: blocked
+            ? '$name не сможет войти в Сметчик, пока вы не снимете блокировку.'
+            : '$name снова сможет войти в Сметчик.',
+        confirmLabel: blocked ? 'Заблокировать' : 'Разблокировать',
+        danger: blocked,
       ),
     );
     if (confirmed != true) return;
@@ -1102,26 +1084,16 @@ class _UsersViewState extends State<_UsersView> {
     final label = _adminRoleLabel(role);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(role == null ? 'Отозвать доступ' : 'Назначить роль'),
-        content: Text(
-          role == null
-              ? '$name потеряет доступ к админ-панели.'
-              : '$name получит роль «$label» в админ-панели.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            style: role == null
-                ? FilledButton.styleFrom(backgroundColor: AppColors.danger)
-                : null,
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(role == null ? 'Отозвать' : 'Назначить'),
-          ),
-        ],
+      builder: (context) => _AdminConfirmDialog(
+        icon: role == null
+            ? Icons.admin_panel_settings_outlined
+            : Icons.verified_user_outlined,
+        title: role == null ? 'Отозвать доступ' : 'Назначить роль',
+        description: role == null
+            ? '$name потеряет доступ к админ-панели.'
+            : '$name получит роль «$label» в админ-панели.',
+        confirmLabel: role == null ? 'Отозвать' : 'Назначить',
+        danger: role == null,
       ),
     );
     if (confirmed != true) return;
@@ -1548,23 +1520,7 @@ class _PromosViewState extends State<_PromosView> {
       final code = _fallback(data['code'], '');
       await showDialog<void>(
         context: context,
-        builder: (_) => AlertDialog(
-          title: const Text('Промокод создан'),
-          content: SelectableText(
-            code,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.4,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Готово'),
-            ),
-          ],
-        ),
+        builder: (_) => _PromoCreatedDialog(code: code),
       );
       await _load();
     } catch (error) {
@@ -2324,7 +2280,6 @@ class _PromoCreateDialog extends StatefulWidget {
 
 class _PromoCreateDialogState extends State<_PromoCreateDialog> {
   final _title = TextEditingController(text: 'Профи на 30 дней');
-  final _code = TextEditingController();
   final _days = TextEditingController(text: '30');
   final _limit = TextEditingController(text: '1');
   DateTime? _expiresAt;
@@ -2332,7 +2287,6 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
   @override
   void dispose() {
     _title.dispose();
-    _code.dispose();
     _days.dispose();
     _limit.dispose();
     super.dispose();
@@ -2356,7 +2310,6 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
     Navigator.of(context).pop(
       _PromoRequest(
         title: _title.text.trim(),
-        code: _code.text.trim(),
         days: days,
         limit: limit,
         expiresAt: _expiresAt,
@@ -2366,72 +2319,70 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Новый промокод'),
-      content: SizedBox(
-        width: 450,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+    return _AdminDialogFrame(
+      icon: Icons.local_offer_outlined,
+      title: 'Новый промокод',
+      subtitle: 'Код из 16 символов будет создан автоматически.',
+      footer: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Отмена'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: _submit,
+              icon: const Icon(Icons.auto_awesome_rounded),
+              label: const Text('Создать'),
+            ),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _title,
+            decoration: const InputDecoration(labelText: 'Название для себя'),
+          ),
+          const SizedBox(height: 12),
+          Row(
             children: [
-              TextField(
-                controller: _title,
-                decoration: const InputDecoration(
-                  labelText: 'Название для себя',
+              Expanded(
+                child: TextField(
+                  controller: _days,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Дней Профи'),
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _code,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'Свой код',
-                  hintText: 'Оставьте пустым для генерации',
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _days,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Дней Профи',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _limit,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Активаций'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _pickExpiry,
-                icon: const Icon(Icons.event_outlined),
-                label: Text(
-                  _expiresAt == null
-                      ? 'Без срока действия'
-                      : 'Действует до ${formatDate(_expiresAt!)}',
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _limit,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Активаций'),
                 ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _pickExpiry,
+              icon: const Icon(Icons.event_outlined),
+              label: Text(
+                _expiresAt == null
+                    ? 'Без срока действия'
+                    : 'Действует до ${formatDate(_expiresAt!)}',
+              ),
+            ),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(onPressed: _submit, child: const Text('Создать')),
-      ],
     );
   }
 }
@@ -2439,21 +2390,18 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
 class _PromoRequest {
   const _PromoRequest({
     required this.title,
-    required this.code,
     required this.days,
     required this.limit,
     required this.expiresAt,
   });
 
   final String title;
-  final String code;
   final int days;
   final int limit;
   final DateTime? expiresAt;
 
   Map<String, dynamic> toJson() => {
     'title': title,
-    'code': code,
     'grantDays': days,
     'maxRedemptions': limit,
     if (expiresAt != null) 'expiresAt': expiresAt!.toUtc().toIso8601String(),
@@ -2553,6 +2501,216 @@ class _InlineError extends StatelessWidget {
   );
 }
 
+class _AdminDialogFrame extends StatelessWidget {
+  const _AdminDialogFrame({
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.subtitle,
+    this.footer,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.all(20),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Material(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(24),
+          clipBehavior: Clip.antiAlias,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: AppColors.orangeLight,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Icon(icon, color: AppColors.orangeDark),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          if (subtitle != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle!,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Закрыть',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 18),
+                  child: Divider(height: 1),
+                ),
+                child,
+                if (footer != null) ...[const SizedBox(height: 18), footer!],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminConfirmDialog extends StatelessWidget {
+  const _AdminConfirmDialog({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.confirmLabel,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String confirmLabel;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AdminDialogFrame(
+      icon: icon,
+      title: title,
+      subtitle: danger
+          ? 'Действие можно отменить позднее в админ-панели.'
+          : null,
+      footer: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Отмена'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: danger ? AppColors.danger : AppColors.graphite,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ),
+        ],
+      ),
+      child: Text(
+        description,
+        style: const TextStyle(
+          color: AppColors.textSecondary,
+          height: 1.45,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _PromoCreatedDialog extends StatelessWidget {
+  const _PromoCreatedDialog({required this.code});
+
+  final String code;
+
+  Future<void> _copy(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Промокод скопирован')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _AdminDialogFrame(
+      icon: Icons.verified_outlined,
+      title: 'Промокод создан',
+      subtitle: 'Сохраните код: он будет доступен в списке промокодов.',
+      footer: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => _copy(context),
+              icon: const Icon(Icons.copy_rounded),
+              label: const Text('Копировать'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.graphite,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Готово'),
+            ),
+          ),
+        ],
+      ),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+        decoration: BoxDecoration(
+          color: AppColors.graphite,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: SelectableText(
+          code,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontFamily: 'monospace',
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.3,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptyPanel extends StatelessWidget {
   const _EmptyPanel({required this.icon, required this.text});
   final IconData icon;
@@ -2583,25 +2741,37 @@ Future<int?> _askDays(BuildContext context, {required String title}) async {
   final controller = TextEditingController(text: '30');
   final value = await showDialog<int>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: TextField(
+    builder: (context) => _AdminDialogFrame(
+      icon: Icons.workspace_premium_outlined,
+      title: title,
+      subtitle: 'Доступ включится сразу после подтверждения.',
+      footer: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Отмена'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.graphite,
+              ),
+              onPressed: () =>
+                  Navigator.of(context).pop(int.tryParse(controller.text)),
+              child: const Text('Выдать'),
+            ),
+          ),
+        ],
+      ),
+      child: TextField(
         controller: controller,
         autofocus: true,
         keyboardType: TextInputType.number,
         decoration: const InputDecoration(labelText: 'Количество дней'),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Отмена'),
-        ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.of(context).pop(int.tryParse(controller.text)),
-          child: const Text('Выдать'),
-        ),
-      ],
     ),
   );
   controller.dispose();

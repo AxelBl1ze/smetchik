@@ -60,7 +60,7 @@ Deno.serve(async (request) => {
       case 'evidence':
         return json(await evidence(context, body));
       case 'audit':
-        return json(await audit(context));
+        return json(await audit(context, body));
       default:
         throw new HttpError('Неизвестное действие админ-панели.', 400);
     }
@@ -662,10 +662,8 @@ function maskPromo(code: string) {
 
 function generatePromoCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = crypto.getRandomValues(new Uint8Array(10));
-  let value = 'PRO';
-  for (const byte of bytes) value += alphabet[byte % alphabet.length];
-  return value;
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
 }
 
 async function sha256(value: string) {
