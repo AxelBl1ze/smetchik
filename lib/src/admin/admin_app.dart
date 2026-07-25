@@ -1817,7 +1817,7 @@ class _PromosViewState extends State<_PromosView> {
                   ),
                   SizedBox(height: 3),
                   Text(
-                    'Код можно ограничить сроком, количеством активаций и днями Профи.',
+                    'Выберите тариф, срок и количество активаций для кода.',
                     style: TextStyle(
                       color: AppColors.textSecondary,
                       height: 1.35,
@@ -1918,7 +1918,7 @@ class _PromoCard extends StatelessWidget {
                       )
                     else
                       Text(
-                        '${_fallback(promo['code_hint'], '***')} · ${_integer(promo['grant_days'])} дней Профи',
+                        '${_fallback(promo['code_hint'], '***')} · ${_integer(promo['grant_days'])} дней ${promo['plan'] == 'team' ? 'Бригада' : 'Профи'}',
                         style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
@@ -1926,7 +1926,7 @@ class _PromoCard extends StatelessWidget {
                       ),
                     const SizedBox(height: 4),
                     Text(
-                      '$redemptions из $maximum активаций · ${_integer(promo['grant_days'])} дней Профи${expires == null ? '' : ' · до ${formatDate(expires)}'}',
+                      '$redemptions из $maximum активаций · ${_integer(promo['grant_days'])} дней ${promo['plan'] == 'team' ? 'Бригада' : 'Профи'}${expires == null ? '' : ' · до ${formatDate(expires)}'}',
                       style: const TextStyle(
                         color: AppColors.textHint,
                         fontSize: 12,
@@ -2536,6 +2536,7 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
   final _days = TextEditingController(text: '30');
   final _limit = TextEditingController(text: '1');
   DateTime? _expiresAt;
+  String _plan = 'pro';
 
   @override
   void dispose() {
@@ -2563,6 +2564,7 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
     Navigator.of(context).pop(
       _PromoRequest(
         title: _title.text.trim(),
+        plan: _plan,
         days: days,
         limit: limit,
         expiresAt: _expiresAt,
@@ -2600,6 +2602,23 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
           TextField(
             controller: _title,
             decoration: const InputDecoration(labelText: 'Название для себя'),
+          ),
+          const SizedBox(height: 12),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'pro',
+                label: Text('Профи'),
+                icon: Icon(Icons.workspace_premium_outlined),
+              ),
+              ButtonSegment(
+                value: 'team',
+                label: Text('Бригада'),
+                icon: Icon(Icons.groups_2_outlined),
+              ),
+            ],
+            selected: {_plan},
+            onSelectionChanged: (value) => setState(() => _plan = value.first),
           ),
           const SizedBox(height: 12),
           Row(
@@ -2643,18 +2662,21 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
 class _PromoRequest {
   const _PromoRequest({
     required this.title,
+    required this.plan,
     required this.days,
     required this.limit,
     required this.expiresAt,
   });
 
   final String title;
+  final String plan;
   final int days;
   final int limit;
   final DateTime? expiresAt;
 
   Map<String, dynamic> toJson() => {
     'title': title,
+    'plan': plan,
     'grantDays': days,
     'maxRedemptions': limit,
     if (expiresAt != null) 'expiresAt': expiresAt!.toUtc().toIso8601String(),

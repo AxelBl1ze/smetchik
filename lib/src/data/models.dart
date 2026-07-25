@@ -314,9 +314,14 @@ class SubscriptionSource {
 }
 
 class PromoRedemptionResult {
-  const PromoRedemptionResult({required this.title, required this.renewsAt});
+  const PromoRedemptionResult({
+    required this.title,
+    required this.plan,
+    required this.renewsAt,
+  });
 
   final String? title;
+  final String plan;
   final DateTime? renewsAt;
 }
 

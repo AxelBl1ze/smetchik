@@ -212,6 +212,7 @@ async function createPromo(
 ): Promise<JsonRecord> {
   requireSupport(context);
   const title = firstString(body.title) ?? 'Промокод Профи';
+  const plan = firstString(body.plan) === 'team' ? 'team' : 'pro';
   const grantDays = boundedInt(body.grantDays, 30, 1, 1095);
   const maxRedemptions = boundedInt(body.maxRedemptions, 1, 1, 100000);
   const startsAt = optionalDate(body.startsAt);
@@ -228,13 +229,13 @@ async function createPromo(
     code_hint: maskPromo(rawCode),
     code_value: rawCode,
     title: title.slice(0, 120),
-    plan: 'pro',
+    plan,
     grant_days: grantDays,
     max_redemptions: maxRedemptions,
     starts_at: startsAt,
     expires_at: expiresAt,
     created_by: context.user.id,
-  }).select('id,code_hint,code_value,title,grant_days,max_redemptions,starts_at,expires_at,is_active').single();
+  }).select('id,code_hint,code_value,title,plan,grant_days,max_redemptions,starts_at,expires_at,is_active').single();
   if (response.error) {
     if (response.error.code === '23505') {
       throw new HttpError('Такой промокод уже существует. Выберите другой.', 409);
@@ -244,6 +245,7 @@ async function createPromo(
 
   await logEvent(context, 'promo_created', 'promo_code', response.data.id, {
     title: response.data.title,
+    plan,
     grantDays,
     maxRedemptions,
   });

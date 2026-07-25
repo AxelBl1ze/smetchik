@@ -553,9 +553,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _changePlan(String plan) async {
-    if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.pro ||
-        SubscriptionPlan.normalize(plan) == SubscriptionPlan.team) {
-      await _showPromoCodeSheet();
+    if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.pro) {
+      await _showCheckout(SubscriptionPlan.pro);
+      return;
+    }
+    if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.team) {
+      await _showCheckout(SubscriptionPlan.team);
       return;
     }
     if (!mounted) return;
@@ -564,6 +567,27 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         content: Text(
           'Базовый тариф включится автоматически после окончания Профи.',
         ),
+      ),
+    );
+  }
+
+  Future<void> _showCheckout(String plan) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _MockCheckoutSheet(
+        plan: plan,
+        onPay: () {
+          Navigator.of(sheetContext).pop();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Оплата тарифа «${SubscriptionPlan.label(plan)}» появится после подключения платёжного провайдера. Промокоды вводятся отдельно в настройках.',
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -692,7 +716,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         SnackBar(
           content: Text(
             title == null || title.isEmpty
-                ? 'Профи активирован${date == null ? '' : ' до $date'}'
+                ? '${SubscriptionPlan.label(result.plan)} активирован${date == null ? '' : ' до $date'}'
                 : '$title активирован${date == null ? '' : ' до $date'}',
           ),
         ),
@@ -4401,11 +4425,10 @@ class _TariffSheetDragHandleState extends State<_TariffSheetDragHandle> {
   }
 }
 
-// Legacy visual prototype kept outside the application flow.
-// ignore: unused_element
 class _MockCheckoutSheet extends StatelessWidget {
-  const _MockCheckoutSheet({required this.onPay});
+  const _MockCheckoutSheet({required this.plan, required this.onPay});
 
+  final String plan;
   final VoidCallback onPay;
 
   @override
@@ -4452,12 +4475,12 @@ class _MockCheckoutSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Expanded(
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Профи',
+                            SubscriptionPlan.label(plan),
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
@@ -4474,7 +4497,7 @@ class _MockCheckoutSheet extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      SubscriptionPlan.price(SubscriptionPlan.pro),
+                      SubscriptionPlan.price(plan),
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
@@ -4498,9 +4521,7 @@ class _MockCheckoutSheet extends StatelessWidget {
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 10),
-                      for (final feature in SubscriptionPlan.features(
-                        SubscriptionPlan.pro,
-                      ))
+                      for (final feature in SubscriptionPlan.features(plan))
                         Padding(
                           padding: const EdgeInsets.only(bottom: 7),
                           child: Row(

@@ -173,6 +173,7 @@ class SmetchikRepository {
     final data = _functionData(response.data);
     return PromoRedemptionResult(
       title: data['title'] as String?,
+      plan: SubscriptionPlan.normalize(data['plan'] as String?),
       renewsAt: asDateOrNull(data['renewsAt']),
     );
   }
@@ -933,7 +934,16 @@ class SmetchikRepository {
       'notes': _blankToNull(draft.notes),
     };
     if (transactionId == null) {
-      await _client.from('project_transactions').insert(payload);
+      final row = await _client
+          .from('project_transactions')
+          .insert(payload)
+          .select('id')
+          .single();
+      await _linkMatchingMaterialExpense(
+        projectId: projectId,
+        draft: draft,
+        transactionId: row['id'] as String,
+      );
       return;
     }
     await _client
@@ -941,6 +951,46 @@ class SmetchikRepository {
         .update(payload)
         .eq('id', transactionId)
         .eq('project_id', projectId)
+        .eq('user_id', _userId);
+    await _linkMatchingMaterialExpense(
+      projectId: projectId,
+      draft: draft,
+      transactionId: transactionId,
+    );
+  }
+
+  Future<void> _linkMatchingMaterialExpense({
+    required String projectId,
+    required ProjectTransactionDraft draft,
+    required String transactionId,
+  }) async {
+    if (ProjectTransactionType.normalize(draft.type) !=
+            ProjectTransactionType.expense ||
+        draft.category != ProjectTransactionCategory.materials ||
+        draft.title.trim().isEmpty) {
+      return;
+    }
+    final material = await _client
+        .from('project_materials')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('user_id', _userId)
+        .eq('title', draft.title.trim())
+        .limit(1)
+        .maybeSingle();
+    if (material == null) return;
+    await _client
+        .from('project_materials')
+        .update({
+          'actual_quantity': draft.quantity,
+          'actual_amount': draft.amount,
+          'purchased_at': draft.transactionDate
+              .toIso8601String()
+              .split('T')
+              .first,
+          'purchase_transaction_id': transactionId,
+        })
+        .eq('id', material['id'] as String)
         .eq('user_id', _userId);
   }
 
