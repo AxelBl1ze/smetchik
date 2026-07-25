@@ -8,10 +8,11 @@ const corsHeaders = {
 };
 
 type JsonRecord = Record<string, unknown>;
+type AdminRole = 'owner' | 'support' | 'auditor';
 
 type AdminContext = {
   admin: ReturnType<typeof createClient>;
-  user: { id: string; email: string | null };
+  user: { id: string; email: string | null; role: AdminRole };
 };
 
 class HttpError extends Error {
@@ -50,6 +51,10 @@ Deno.serve(async (request) => {
         return json(await grantSubscription(context, body));
       case 'revoke_subscription':
         return json(await revokeSubscription(context, body));
+      case 'set_user_block':
+        return json(await setUserBlock(context, body));
+      case 'set_admin_role':
+        return json(await setAdminRole(context, body));
       case 'signed_estimates':
         return json(await signedEstimates(context, body));
       case 'evidence':
@@ -110,7 +115,11 @@ async function dashboard(context: AdminContext): Promise<JsonRecord> {
   }).length;
 
   return {
-    operator: { email: context.user.email },
+    operator: {
+      id: context.user.id,
+      email: context.user.email,
+      role: context.user.role,
+    },
     metrics: {
       users: usersCount,
       estimates: estimatesCount,
@@ -123,6 +132,7 @@ async function dashboard(context: AdminContext): Promise<JsonRecord> {
 }
 
 async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecord> {
+  requireSupport(context);
   const query = (firstString(body.query) ?? '').toLowerCase();
   const response = await context.admin.auth.admin.listUsers({
     page: 1,
@@ -142,6 +152,15 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
     : { data: [], error: null };
   if (profiles.error) throw profiles.error;
   const byId = new Map((profiles.data ?? []).map((profile) => [profile.id, profile]));
+  const adminRoles = ids.length
+    ? await context.admin
+      .from('app_admins')
+      .select('user_id,role,enabled')
+      .in('user_id', ids)
+      .eq('enabled', true)
+    : { data: [], error: null };
+  if (adminRoles.error) throw adminRoles.error;
+  const roleById = new Map((adminRoles.data ?? []).map((admin) => [admin.user_id, admin.role]));
 
   const rows = authUsers
     .map((user) => {
@@ -157,6 +176,8 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
         subscriptionStatus: profile.subscription_status ?? 'active',
         subscriptionSource: profile.subscription_source ?? 'manual',
         subscriptionRenewsAt: profile.subscription_renews_at ?? null,
+        bannedUntil: user.banned_until ?? null,
+        adminRole: roleById.get(user.id) ?? null,
       };
     })
     .filter((row) => {
@@ -173,6 +194,7 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
 }
 
 async function promos(context: AdminContext): Promise<JsonRecord> {
+  requireSupport(context);
   const response = await context.admin
     .from('promo_codes')
     .select(
@@ -188,6 +210,7 @@ async function createPromo(
   context: AdminContext,
   body: JsonRecord,
 ): Promise<JsonRecord> {
+  requireSupport(context);
   const title = firstString(body.title) ?? 'Промокод Профи';
   const grantDays = boundedInt(body.grantDays, 30, 1, 1095);
   const maxRedemptions = boundedInt(body.maxRedemptions, 1, 1, 100000);
@@ -231,6 +254,7 @@ async function setPromoActive(
   context: AdminContext,
   body: JsonRecord,
 ): Promise<JsonRecord> {
+  requireSupport(context);
   const id = requiredUuid(body.id, 'промокод');
   const active = body.active === true;
   const response = await context.admin
@@ -256,6 +280,7 @@ async function grantSubscription(
   context: AdminContext,
   body: JsonRecord,
 ): Promise<JsonRecord> {
+  requireSupport(context);
   const userId = requiredUuid(body.userId, 'пользователя');
   const days = boundedInt(body.days, 30, 1, 1095);
   const profile = await context.admin
@@ -292,6 +317,7 @@ async function revokeSubscription(
   context: AdminContext,
   body: JsonRecord,
 ): Promise<JsonRecord> {
+  requireSupport(context);
   const userId = requiredUuid(body.userId, 'пользователя');
   const update = await context.admin
     .from('profiles')
@@ -311,6 +337,78 @@ async function revokeSubscription(
     plan: 'basic',
   });
   return { userId, plan: 'basic', renewsAt: null };
+}
+
+async function setUserBlock(
+  context: AdminContext,
+  body: JsonRecord,
+): Promise<JsonRecord> {
+  requireSupport(context);
+  const userId = requiredUuid(body.userId, 'пользователя');
+  const blocked = body.blocked === true;
+  if (userId === context.user.id) {
+    throw new HttpError('Нельзя заблокировать собственный аккаунт.', 400);
+  }
+
+  const targetAdmin = await context.admin
+    .from('app_admins')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('enabled', true)
+    .maybeSingle();
+  if (targetAdmin.error) throw targetAdmin.error;
+  if (targetAdmin.data && context.user.role !== 'owner') {
+    throw new HttpError('Блокировать администратора может только владелец.', 403);
+  }
+
+  const update = await context.admin.auth.admin.updateUserById(userId, {
+    ban_duration: blocked ? '876000h' : 'none',
+  });
+  if (update.error) throw update.error;
+  await logEvent(context, blocked ? 'user_blocked' : 'user_unblocked', 'profile', userId);
+  return { userId, blocked };
+}
+
+async function setAdminRole(
+  context: AdminContext,
+  body: JsonRecord,
+): Promise<JsonRecord> {
+  requireOwner(context);
+  const userId = requiredUuid(body.userId, 'пользователя');
+  const requested = firstString(body.role);
+  const role = isAdminRole(requested) ? requested : null;
+  if (requested && !role) throw new HttpError('Неизвестная роль администратора.', 400);
+  if (userId === context.user.id && role !== 'owner') {
+    throw new HttpError('Владелец не может понизить или отозвать собственный доступ.', 400);
+  }
+
+  const authUser = await context.admin.auth.admin.getUserById(userId);
+  if (authUser.error || !authUser.data.user) {
+    throw new HttpError('Пользователь не найден.', 404);
+  }
+  const email = authUser.data.user.email?.toLowerCase();
+  if (!email) throw new HttpError('У пользователя нет email для админ-доступа.', 400);
+
+  if (role == null) {
+    const result = await context.admin
+      .from('app_admins')
+      .delete()
+      .eq('user_id', userId);
+    if (result.error) throw result.error;
+  } else {
+    const result = await context.admin.from('app_admins').upsert(
+      {
+        user_id: userId,
+        email,
+        role,
+        enabled: true,
+      },
+      { onConflict: 'user_id' },
+    );
+    if (result.error) throw result.error;
+  }
+  await logEvent(context, 'admin_role_changed', 'profile', userId, { role });
+  return { userId, role };
 }
 
 async function signedEstimates(
@@ -407,14 +505,26 @@ async function evidence(context: AdminContext, body: JsonRecord): Promise<JsonRe
   };
 }
 
-async function audit(context: AdminContext): Promise<JsonRecord> {
+async function audit(context: AdminContext, body: JsonRecord): Promise<JsonRecord> {
+  const query = (firstString(body.query) ?? '').toLowerCase();
+  const category = firstString(body.category) ?? 'all';
   const response = await context.admin
     .from('admin_audit_events')
     .select('id,actor_user_id,action,entity_type,entity_id,metadata,created_at')
     .order('created_at', { ascending: false })
-    .limit(100);
+    .limit(250);
   if (response.error) throw response.error;
-  return { events: response.data ?? [] };
+  const events = (response.data ?? []).filter((event) => {
+    const action = String(event.action ?? '');
+    if (category !== 'all' && auditCategory(action) !== category) return false;
+    if (!query) return true;
+    return [action, event.entity_type, event.entity_id, JSON.stringify(event.metadata ?? {})]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  });
+  return { events };
 }
 
 async function signedEvidenceFiles(admin: ReturnType<typeof createClient>, estimate: JsonRecord) {
@@ -450,13 +560,44 @@ async function authenticatedAdmin(request: Request): Promise<AdminContext> {
   }
   const role = await admin
     .from('app_admins')
-    .select('user_id')
+    .select('user_id,role')
     .eq('user_id', user.id)
     .eq('enabled', true)
     .maybeSingle();
   if (role.error) throw role.error;
   if (!role.data) throw new HttpError('У этого аккаунта нет доступа к админ-панели.', 403);
-  return { admin, user: { id: user.id, email: user.email ?? null } };
+  return {
+    admin,
+    user: {
+      id: user.id,
+      email: user.email ?? null,
+      role: isAdminRole(role.data.role) ? role.data.role : 'owner',
+    },
+  };
+}
+
+function isAdminRole(value: unknown): value is AdminRole {
+  return value === 'owner' || value === 'support' || value === 'auditor';
+}
+
+function requireOwner(context: AdminContext) {
+  if (context.user.role !== 'owner') {
+    throw new HttpError('Это действие доступно только владельцу.', 403);
+  }
+}
+
+function requireSupport(context: AdminContext) {
+  if (context.user.role === 'auditor') {
+    throw new HttpError('У аудитора доступ только к документам и журналу.', 403);
+  }
+}
+
+function auditCategory(action: string) {
+  if (action.includes('promo')) return 'promos';
+  if (action.includes('evidence') || action.includes('signed')) return 'documents';
+  if (action.includes('admin_role')) return 'admins';
+  if (action.includes('block') || action.includes('subscription')) return 'access';
+  return 'other';
 }
 
 async function countRows(

@@ -249,6 +249,66 @@ class PdfService {
     return doc.save();
   }
 
+  static Future<Uint8List> buildCompletionActPdf({
+    required EstimateDetail detail,
+    required ProfileModel? profile,
+  }) async {
+    final (regular, bold) = await _fonts();
+    final theme = pw.ThemeData.withFont(base: regular, bold: bold);
+    final doc = pw.Document(theme: theme);
+    final images = await Future.wait<pw.ImageProvider?>([
+      _loadProfileImage(profile?.logoUrl),
+      _loadProfileImage(profile?.signatureUrl),
+      _loadProfileImage(detail.estimate.clientSignatureUrl),
+    ]);
+    final estimate = detail.estimate;
+    final render = _PdfRenderOptions.fromProfile(
+      profile,
+      logoImage: images[0],
+      signatureImage: images[1],
+      clientSignatureImage: images[2],
+    ).formalDocument();
+
+    doc.addPage(
+      pw.MultiPage(
+        pageTheme: _formalPageTheme(render),
+        footer: render.showServiceMark ? _serviceFooter : null,
+        build: (context) => [
+          _documentHeader(
+            render: render,
+            title: 'Акт выполненных работ',
+            subtitle: estimate.objectTitle,
+            meta: [
+              'Дата: ${formatDate(DateTime.now())}',
+              'К смете: ${estimate.id.substring(0, 8).toUpperCase()}',
+              'Версия сметы: ${estimate.documentVersion}',
+            ],
+          ),
+          pw.SizedBox(height: 20),
+          _actIntro(render, estimate),
+          pw.SizedBox(height: 18),
+          _sectionTitle(render, 'Выполненные работы'),
+          pw.SizedBox(height: 8),
+          _estimateLines(render, detail.lines),
+          pw.SizedBox(height: 16),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.end,
+            children: [_totalBlock(render, estimate.totalAmount)],
+          ),
+          pw.SizedBox(height: 22),
+          _noteBlock(
+            render,
+            'Подтверждение сторон',
+            'Заказчик подтверждает, что работы приняты в полном объёме. Претензии по объёму и качеству на дату подписания отсутствуют.',
+          ),
+          pw.SizedBox(height: 30),
+          _signatures(render, estimate),
+        ],
+      ),
+    );
+    return doc.save();
+  }
+
   static Future<pw.ImageProvider?> _loadProfileImage(String? value) async {
     final url = value?.trim();
     if (url == null || url.isEmpty) return null;
@@ -292,6 +352,13 @@ class PdfService {
               ),
             )
           : null,
+    );
+  }
+
+  static pw.PageTheme _formalPageTheme(_PdfRenderOptions render) {
+    return pw.PageTheme(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(34, 34, 34, 38),
     );
   }
 
@@ -554,6 +621,47 @@ class PdfService {
           ),
           pw.SizedBox(width: 12),
           pw.Expanded(child: _infoBlock(render, 'Клиент', client)),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _actIntro(_PdfRenderOptions render, EstimateModel estimate) {
+    final master = [
+      render.masterName,
+      render.profile?.specialization?.trim(),
+      render.profile?.phone?.trim(),
+    ].whereType<String>().where((value) => value.isNotEmpty).join(', ');
+    final customer = [
+      estimate.clientSignedName ?? estimate.client?.name,
+      estimate.clientSignedPhone ?? estimate.client?.phone,
+      estimate.client?.objectAddress,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(', ');
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: render.surface,
+        borderRadius: pw.BorderRadius.circular(render.radius),
+        border: pw.Border.all(color: render.border),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'Исполнитель: ${master.isEmpty ? 'не указан' : master}',
+            style: pw.TextStyle(color: render.primaryText, fontSize: 10),
+          ),
+          pw.SizedBox(height: 5),
+          pw.Text(
+            'Заказчик: ${customer.isEmpty ? 'не указан' : customer}',
+            style: pw.TextStyle(color: render.primaryText, fontSize: 10),
+          ),
+          pw.SizedBox(height: 5),
+          pw.Text(
+            'Объект: ${estimate.objectTitle}',
+            style: pw.TextStyle(color: render.primaryText, fontSize: 10),
+          ),
         ],
       ),
     );
@@ -1293,6 +1401,24 @@ class _PdfRenderOptions {
       clientSignatureImage: clientSignatureImage,
       paymentQrImage: paymentQrImage,
       contactQrImage: contactQrImage,
+    );
+  }
+
+  _PdfRenderOptions formalDocument() {
+    return _PdfRenderOptions(
+      profile: profile,
+      template: SmetaTemplates.standardFree,
+      accentHex: accentHex,
+      showBrandHeader: showBrandHeader,
+      showSignatures: true,
+      showServiceMark: showServiceMark,
+      paymentTerms: null,
+      footerNote: null,
+      logoImage: logoImage,
+      signatureImage: signatureImage,
+      clientSignatureImage: clientSignatureImage,
+      paymentQrImage: null,
+      contactQrImage: null,
     );
   }
 

@@ -1013,90 +1013,96 @@ class _CatalogAddSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.16),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 38,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Container(
+              margin: const EdgeInsets.all(10),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.16),
+                    blurRadius: 28,
+                    offset: const Offset(0, 12),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Row(
+                ],
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: AppColors.graphite,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(
-                      child: Text(
-                        'Добавить в прайс',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
+                    Center(
+                      child: Container(
+                        width: 38,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: AppColors.border,
+                          borderRadius: BorderRadius.circular(99),
                         ),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: AppColors.graphite,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Добавить в прайс',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    _CatalogAddTile(
+                      title: 'Новая услуга',
+                      subtitle: 'Работа, единица измерения и цена',
+                      icon: Icons.handyman_outlined,
+                      iconColor: AppColors.orange,
+                      backgroundColor: AppColors.orangeLight,
+                      onTap: () =>
+                          Navigator.pop(context, _CatalogAddAction.work),
+                    ),
+                    const SizedBox(height: 8),
+                    _CatalogAddTile(
+                      title: 'Новый раздел',
+                      subtitle: 'Группа для услуг: сантехника, отделка и т.д.',
+                      icon: Icons.create_new_folder_outlined,
+                      iconColor: Colors.white,
+                      backgroundColor: AppColors.graphite,
+                      onTap: () =>
+                          Navigator.pop(context, _CatalogAddAction.category),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                _CatalogAddTile(
-                  title: 'Новая услуга',
-                  subtitle: 'Работа, единица измерения и цена',
-                  icon: Icons.handyman_outlined,
-                  iconColor: AppColors.orange,
-                  backgroundColor: AppColors.orangeLight,
-                  onTap: () => Navigator.pop(context, _CatalogAddAction.work),
-                ),
-                const SizedBox(height: 8),
-                _CatalogAddTile(
-                  title: 'Новый раздел',
-                  subtitle: 'Группа для услуг: сантехника, отделка и т.д.',
-                  icon: Icons.create_new_folder_outlined,
-                  iconColor: Colors.white,
-                  backgroundColor: AppColors.graphite,
-                  onTap: () =>
-                      Navigator.pop(context, _CatalogAddAction.category),
-                ),
-              ],
+              ),
             ),
           ),
         ),

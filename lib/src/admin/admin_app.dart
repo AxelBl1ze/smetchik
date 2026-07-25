@@ -663,6 +663,8 @@ class _AdminContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final operator = _record(dashboard?['operator']);
+    final isOwner = _fallback(operator['role'], 'owner') == 'owner';
     final title = switch (section) {
       _AdminSection.overview => 'Обзор',
       _AdminSection.users => 'Пользователи',
@@ -672,7 +674,7 @@ class _AdminContent extends StatelessWidget {
     };
     final subtitle = switch (section) {
       _AdminSection.overview => 'Состояние сервиса и последние события',
-      _AdminSection.users => 'Тарифы и ручная поддержка доступа',
+      _AdminSection.users => 'Тарифы, блокировки и служебные доступы',
       _AdminSection.promos => 'Выдача Профи без подключения оплаты',
       _AdminSection.signatures =>
         'Зафиксированные документы и пакет доказательств',
@@ -739,7 +741,10 @@ class _AdminContent extends StatelessWidget {
                   dashboard: dashboard,
                   loading: loading,
                 ),
-                _AdminSection.users => _UsersView(api: api),
+                _AdminSection.users => _UsersView(
+                  api: api,
+                  canManageAdmins: isOwner,
+                ),
                 _AdminSection.promos => _PromosView(api: api),
                 _AdminSection.signatures => _SignaturesView(api: api),
                 _AdminSection.audit => _AuditView(api: api),
@@ -922,9 +927,10 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _UsersView extends StatefulWidget {
-  const _UsersView({required this.api});
+  const _UsersView({required this.api, required this.canManageAdmins});
 
   final AdminApi api;
+  final bool canManageAdmins;
 
   @override
   State<_UsersView> createState() => _UsersViewState();
@@ -1036,6 +1042,113 @@ class _UsersViewState extends State<_UsersView> {
     }
   }
 
+  Future<void> _setBlocked(Map<String, dynamic> user, bool blocked) async {
+    final name = _fallback(user['fullName'], 'этого пользователя');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          blocked
+              ? 'Заблокировать пользователя'
+              : 'Разблокировать пользователя',
+        ),
+        content: Text(
+          blocked
+              ? '$name не сможет войти в Сметчик, пока вы не снимете блокировку.'
+              : '$name снова сможет войти в Сметчик.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            style: blocked
+                ? FilledButton.styleFrom(backgroundColor: AppColors.danger)
+                : null,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(blocked ? 'Заблокировать' : 'Разблокировать'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.api.call(
+        'set_user_block',
+        body: {'userId': user['id'], 'blocked': blocked},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            blocked
+                ? 'Пользователь заблокирован'
+                : 'Пользователь разблокирован',
+          ),
+        ),
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_message(error))));
+    }
+  }
+
+  Future<void> _setAdminRole(Map<String, dynamic> user, String? role) async {
+    final name = _fallback(user['fullName'], 'этого пользователя');
+    final label = _adminRoleLabel(role);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(role == null ? 'Отозвать доступ' : 'Назначить роль'),
+        content: Text(
+          role == null
+              ? '$name потеряет доступ к админ-панели.'
+              : '$name получит роль «$label» в админ-панели.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            style: role == null
+                ? FilledButton.styleFrom(backgroundColor: AppColors.danger)
+                : null,
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(role == null ? 'Отозвать' : 'Назначить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await widget.api.call(
+        'set_admin_role',
+        body: {'userId': user['id'], 'role': role},
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            role == null
+                ? 'Служебный доступ отозван'
+                : 'Роль «$label» назначена',
+          ),
+        ),
+      );
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_message(error))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1081,6 +1194,10 @@ class _UsersViewState extends State<_UsersView> {
                 user: user,
                 onGrant: () => _grant(user),
                 onRevoke: () => _revoke(user),
+                onBlockChanged: (blocked) => _setBlocked(user, blocked),
+                onAdminRoleChanged: widget.canManageAdmins
+                    ? (role) => _setAdminRole(user, role)
+                    : null,
               ),
             ),
           ),
@@ -1094,11 +1211,15 @@ class _AdminUserCard extends StatelessWidget {
     required this.user,
     required this.onGrant,
     required this.onRevoke,
+    required this.onBlockChanged,
+    required this.onAdminRoleChanged,
   });
 
   final Map<String, dynamic> user;
   final VoidCallback onGrant;
   final VoidCallback onRevoke;
+  final ValueChanged<bool> onBlockChanged;
+  final ValueChanged<String?>? onAdminRoleChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1106,6 +1227,9 @@ class _AdminUserCard extends StatelessWidget {
     final renewsAt = _date(user['subscriptionRenewsAt']);
     final pro =
         plan == 'pro' && (renewsAt == null || renewsAt.isAfter(DateTime.now()));
+    final bannedUntil = _date(user['bannedUntil']);
+    final blocked = bannedUntil != null && bannedUntil.isAfter(DateTime.now());
+    final adminRole = _fallback(user['adminRole'], '');
     return SmetchikCard(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1156,6 +1280,29 @@ class _AdminUserCard extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
+                    if (adminRole.isNotEmpty || blocked) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (adminRole.isNotEmpty)
+                            _UserMiniPill(
+                              icon: Icons.admin_panel_settings_outlined,
+                              label: _adminRoleLabel(adminRole),
+                              color: AppColors.info,
+                              background: AppColors.infoBg,
+                            ),
+                          if (blocked)
+                            const _UserMiniPill(
+                              icon: Icons.block_outlined,
+                              label: 'Заблокирован',
+                              color: AppColors.danger,
+                              background: AppColors.dangerBg,
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1190,6 +1337,65 @@ class _AdminUserCard extends StatelessWidget {
                 ? 'Профи'
                 : 'Базовый',
           );
+          final menu = PopupMenuButton<_UserControlAction>(
+            tooltip: 'Управление пользователем',
+            onSelected: (action) {
+              switch (action) {
+                case _UserControlAction.block:
+                  onBlockChanged(true);
+                case _UserControlAction.unblock:
+                  onBlockChanged(false);
+                case _UserControlAction.owner:
+                  onAdminRoleChanged?.call('owner');
+                case _UserControlAction.support:
+                  onAdminRoleChanged?.call('support');
+                case _UserControlAction.auditor:
+                  onAdminRoleChanged?.call('auditor');
+                case _UserControlAction.removeAdmin:
+                  onAdminRoleChanged?.call(null);
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: blocked
+                    ? _UserControlAction.unblock
+                    : _UserControlAction.block,
+                child: Row(
+                  children: [
+                    Icon(
+                      blocked ? Icons.lock_open_outlined : Icons.block_outlined,
+                      color: blocked ? AppColors.success : AppColors.danger,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(blocked ? 'Разблокировать' : 'Заблокировать'),
+                  ],
+                ),
+              ),
+              if (onAdminRoleChanged != null) const PopupMenuDivider(),
+              if (onAdminRoleChanged != null)
+                const PopupMenuItem(
+                  value: _UserControlAction.owner,
+                  child: Text('Роль: Владелец'),
+                ),
+              if (onAdminRoleChanged != null)
+                const PopupMenuItem(
+                  value: _UserControlAction.support,
+                  child: Text('Роль: Поддержка'),
+                ),
+              if (onAdminRoleChanged != null)
+                const PopupMenuItem(
+                  value: _UserControlAction.auditor,
+                  child: Text('Роль: Аудитор'),
+                ),
+              if (onAdminRoleChanged != null && adminRole.isNotEmpty)
+                const PopupMenuItem(
+                  value: _UserControlAction.removeAdmin,
+                  child: Text('Отозвать админ-доступ'),
+                ),
+            ],
+            icon: const Icon(Icons.more_horiz),
+          );
           if (narrow) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1198,7 +1404,13 @@ class _AdminUserCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 status,
                 const SizedBox(height: 12),
-                action,
+                Row(
+                  children: [
+                    Expanded(child: action),
+                    const SizedBox(width: 8),
+                    menu,
+                  ],
+                ),
               ],
             );
           }
@@ -1209,12 +1421,54 @@ class _AdminUserCard extends StatelessWidget {
               status,
               const SizedBox(width: 10),
               action,
+              const SizedBox(width: 4),
+              menu,
             ],
           );
         },
       ),
     );
   }
+}
+
+enum _UserControlAction { block, unblock, owner, support, auditor, removeAdmin }
+
+class _UserMiniPill extends StatelessWidget {
+  const _UserMiniPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.background,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+    decoration: BoxDecoration(
+      color: background,
+      borderRadius: BorderRadius.circular(99),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _PlanPill extends StatelessWidget {
@@ -1625,23 +1879,63 @@ class _SignaturesViewState extends State<_SignaturesView> {
     }
   }
 
+  void _exportRegistry() {
+    final stamp = DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now());
+    downloadAdminJson(
+      fileName: 'smetchik-signed-estimates-$stamp.json',
+      contents: const JsonEncoder.withIndent('  ').convert({
+        'generatedAt': DateTime.now().toUtc().toIso8601String(),
+        'count': _estimates.length,
+        'estimates': _estimates,
+      }),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Реестр подписанных смет скачан')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _query,
-          onSubmitted: (_) => _load(),
-          decoration: InputDecoration(
-            labelText: 'Объект, клиент или мастер',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: IconButton(
-              tooltip: 'Найти',
-              onPressed: _loading ? null : _load,
-              icon: const Icon(Icons.search),
-            ),
-          ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final field = TextField(
+              controller: _query,
+              onSubmitted: (_) => _load(),
+              decoration: InputDecoration(
+                labelText: 'Объект, клиент или мастер',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: IconButton(
+                  tooltip: 'Найти',
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.search),
+                ),
+              ),
+            );
+            final export = OutlinedButton.icon(
+              onPressed: _loading || _estimates.isEmpty
+                  ? null
+                  : _exportRegistry,
+              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 50)),
+              icon: const Icon(Icons.download_outlined, size: 18),
+              label: const Text('Реестр'),
+            );
+            if (constraints.maxWidth < 540) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [field, const SizedBox(height: 10), export],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: 10),
+                export,
+              ],
+            );
+          },
         ),
         const SizedBox(height: 16),
         if (_error != null) _InlineError(message: _error!),
@@ -1858,14 +2152,22 @@ class _AuditView extends StatefulWidget {
 }
 
 class _AuditViewState extends State<_AuditView> {
+  final _query = TextEditingController();
   List<Map<String, dynamic>> _events = [];
   bool _loading = true;
   String? _error;
+  String _category = 'all';
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -1874,7 +2176,10 @@ class _AuditViewState extends State<_AuditView> {
       _error = null;
     });
     try {
-      final data = await widget.api.call('audit');
+      final data = await widget.api.call(
+        'audit',
+        body: {'query': _query.text.trim(), 'category': _category},
+      );
       if (mounted) setState(() => _events = _records(data['events']));
     } catch (error) {
       if (mounted) setState(() => _error = _message(error));
@@ -1891,17 +2196,63 @@ class _AuditViewState extends State<_AuditView> {
         child: Center(child: CircularProgressIndicator()),
       );
     }
-    if (_error != null) return _InlineError(message: _error!);
-    if (_events.isEmpty) {
-      return const _EmptyPanel(
-        icon: Icons.history_outlined,
-        text: 'Журнал пока пуст',
-      );
-    }
-    return SmetchikCard(
-      child: Column(
-        children: [for (final event in _events) _AuditLine(event: event)],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _query,
+          onSubmitted: (_) => _load(),
+          decoration: InputDecoration(
+            labelText: 'Поиск по действию или идентификатору',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: IconButton(
+              tooltip: 'Найти',
+              onPressed: _load,
+              icon: const Icon(Icons.search),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final item in const [
+                ('all', 'Все'),
+                ('access', 'Доступы'),
+                ('promos', 'Промокоды'),
+                ('documents', 'Документы'),
+                ('admins', 'Админы'),
+              ]) ...[
+                ChoiceChip(
+                  label: Text(item.$2),
+                  selected: _category == item.$1,
+                  onSelected: (_) {
+                    if (_category == item.$1) return;
+                    setState(() => _category = item.$1);
+                    _load();
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_error != null)
+          _InlineError(message: _error!)
+        else if (_events.isEmpty)
+          const _EmptyPanel(
+            icon: Icons.history_outlined,
+            text: 'События по этому фильтру не найдены',
+          )
+        else
+          SmetchikCard(
+            child: Column(
+              children: [for (final event in _events) _AuditLine(event: event)],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -2300,6 +2651,15 @@ String _message(Object error) {
   return raw.isEmpty ? 'Не удалось выполнить действие.' : raw;
 }
 
+String _adminRoleLabel(String? role) {
+  return switch (role) {
+    'owner' => 'Владелец',
+    'support' => 'Поддержка',
+    'auditor' => 'Аудитор',
+    _ => 'Без роли',
+  };
+}
+
 String _auditLabel(String action) {
   return switch (action) {
     'promo_created' => 'Создан промокод',
@@ -2307,6 +2667,10 @@ String _auditLabel(String action) {
     'promo_disabled' => 'Промокод отключён',
     'promo_redeemed' => 'Промокод активирован',
     'subscription_granted' => 'Выдан доступ Профи',
+    'subscription_revoked' => 'Отключён доступ Профи',
+    'user_blocked' => 'Пользователь заблокирован',
+    'user_unblocked' => 'Пользователь разблокирован',
+    'admin_role_changed' => 'Изменены права администратора',
     'signed_estimate_evidence_exported' => 'Выгружен пакет доказательств',
     _ => action.replaceAll('_', ' '),
   };

@@ -194,6 +194,21 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
               icon: const Icon(Icons.picture_as_pdf),
               label: const Text('Предпросмотр PDF'),
             ),
+            if (EstimateStatus.normalize(value.estimate.status) ==
+                EstimateStatus.completed) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _pdfActionBusy
+                    ? null
+                    : () => _shareCompletionAct(
+                        context,
+                        value,
+                        profile.asData?.value,
+                      ),
+                icon: const Icon(Icons.assignment_turned_in_outlined),
+                label: const Text('Акт выполненных работ'),
+              ),
+            ],
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () => _duplicateEstimate(
@@ -325,6 +340,41 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
     try {
       final bytes = await _resolvePdf(ref, detail, profile);
       await Printing.layoutPdf(onLayout: (_) async => bytes);
+    } catch (error) {
+      if (context.mounted) {
+        _showFloatingSnackBar(context, error.toString(), isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _pdfActionBusy = false);
+    }
+  }
+
+  Future<void> _shareCompletionAct(
+    BuildContext context,
+    EstimateDetail detail,
+    ProfileModel? profile,
+  ) async {
+    setState(() => _pdfActionBusy = true);
+    try {
+      final bytes = await PdfService.buildCompletionActPdf(
+        detail: detail,
+        profile: profile,
+      );
+      final filename = 'akt-${detail.estimate.id.substring(0, 8)}.pdf';
+      await SharePlus.instance.share(
+        ShareParams(
+          title: 'Акт выполненных работ',
+          text: 'Акт по объекту «${detail.estimate.objectTitle}»',
+          files: [
+            XFile.fromData(bytes, mimeType: 'application/pdf', name: filename),
+          ],
+          fileNameOverrides: [filename],
+          downloadFallbackEnabled: true,
+        ),
+      );
+      if (context.mounted) {
+        _showFloatingSnackBar(context, 'Акт готов к отправке');
+      }
     } catch (error) {
       if (context.mounted) {
         _showFloatingSnackBar(context, error.toString(), isError: true);

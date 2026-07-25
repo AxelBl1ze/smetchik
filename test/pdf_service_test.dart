@@ -89,13 +89,44 @@ void main() {
 
       expect(bytes.length, greaterThan(1500), reason: template.id);
 
-      if (const bool.fromEnvironment('WRITE_SAMPLE_PDF') &&
-          template.id == SmetaTemplates.coverDeluxe.id) {
+      if (const bool.fromEnvironment('WRITE_SAMPLE_PDF')) {
         final directory = Directory('tmp/pdfs')..createSync(recursive: true);
         File(
-          '${directory.path}/smeta-cover-deluxe.pdf',
+          '${directory.path}/smeta-${template.id}.pdf',
         ).writeAsBytesSync(bytes);
       }
+
+      final actBytes = await PdfService.buildCompletionActPdf(
+        detail: detail,
+        profile: profile,
+      );
+      expect(actBytes.length, greaterThan(1500), reason: 'act-${template.id}');
+    }
+
+    final pinkProfile = ProfileModel(
+      id: 'user-1',
+      fullName: 'Илья',
+      phone: '+7 932 841-02-12',
+      specialization: 'Сантехник',
+      currency: 'RUB',
+      subscriptionPlan: SubscriptionPlan.pro,
+      subscriptionStatus: SubscriptionStatus.active,
+      subscriptionRenewsAt: DateTime(2026, 8, 10),
+      pdfTemplate: SmetaTemplates.brightAccent.id,
+      pdfAccentColor: '#D4537E',
+      pdfPaymentTerms: '50% предоплата, остаток после приёмки.',
+      pdfFooterNote: 'Смета действует 7 дней.',
+    );
+    final pinkBytes = await PdfService.buildEstimatePdf(
+      detail: detail,
+      profile: pinkProfile,
+    );
+    expect(pinkBytes.length, greaterThan(1500), reason: 'bright-accent-pink');
+    if (const bool.fromEnvironment('WRITE_SAMPLE_PDF')) {
+      final directory = Directory('tmp/pdfs')..createSync(recursive: true);
+      File(
+        '${directory.path}/smeta-premium_bright_accent-pink.pdf',
+      ).writeAsBytesSync(pinkBytes);
     }
   });
 }
