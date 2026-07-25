@@ -357,8 +357,11 @@ async function setUserBlock(
     .eq('enabled', true)
     .maybeSingle();
   if (targetAdmin.error) throw targetAdmin.error;
-  if (targetAdmin.data && context.user.role !== 'owner') {
-    throw new HttpError('Блокировать администратора может только владелец.', 403);
+  if (targetAdmin.data) {
+    throw new HttpError(
+      'Служебные аккаунты нельзя блокировать через админ-панель. Сначала отзовите админ-доступ.',
+      403,
+    );
   }
 
   const update = await context.admin.auth.admin.updateUserById(userId, {

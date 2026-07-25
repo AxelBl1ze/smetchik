@@ -440,16 +440,7 @@ class _AdminWorkspaceState extends State<_AdminWorkspace> {
             ),
       appBar: desktop
           ? null
-          : AppBar(
-              title: const _AdminMark(dark: false, compact: true),
-              actions: [
-                IconButton(
-                  tooltip: 'Обновить',
-                  onPressed: _loading ? null : _loadDashboard,
-                  icon: const Icon(Icons.refresh),
-                ),
-              ],
-            ),
+          : AppBar(title: const _AdminMark(dark: false, compact: true)),
       body: Row(
         children: [
           if (desktop)
@@ -712,16 +703,7 @@ class _AdminContent extends StatelessWidget {
                       ],
                     ),
                   ),
-                  IconButton.outlined(
-                    tooltip: 'Обновить данные',
-                    onPressed: loading ? null : onRefresh,
-                    style: IconButton.styleFrom(
-                      foregroundColor: AppColors.graphite,
-                      backgroundColor: AppColors.card,
-                      side: const BorderSide(color: AppColors.border),
-                    ),
-                    icon: const Icon(Icons.refresh_rounded),
-                  ),
+                  _AdminRefreshButton(enabled: !loading, onTap: onRefresh),
                 ],
               ),
             ),
@@ -749,6 +731,7 @@ class _AdminContent extends StatelessWidget {
                 _AdminSection.users => _UsersView(
                   api: api,
                   canManageAdmins: isOwner,
+                  currentAdminId: _fallback(operator['id'], ''),
                 ),
                 _AdminSection.promos => _PromosView(api: api),
                 _AdminSection.signatures => _SignaturesView(api: api),
@@ -932,10 +915,15 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _UsersView extends StatefulWidget {
-  const _UsersView({required this.api, required this.canManageAdmins});
+  const _UsersView({
+    required this.api,
+    required this.canManageAdmins,
+    required this.currentAdminId,
+  });
 
   final AdminApi api;
   final bool canManageAdmins;
+  final String currentAdminId;
 
   @override
   State<_UsersView> createState() => _UsersViewState();
@@ -1170,6 +1158,7 @@ class _UsersViewState extends State<_UsersView> {
                 onAdminRoleChanged: widget.canManageAdmins
                     ? (role) => _setAdminRole(user, role)
                     : null,
+                currentAdminId: widget.currentAdminId,
               ),
             ),
           ),
@@ -1185,6 +1174,7 @@ class _AdminUserCard extends StatelessWidget {
     required this.onRevoke,
     required this.onBlockChanged,
     required this.onAdminRoleChanged,
+    required this.currentAdminId,
   });
 
   final Map<String, dynamic> user;
@@ -1192,6 +1182,30 @@ class _AdminUserCard extends StatelessWidget {
   final VoidCallback onRevoke;
   final ValueChanged<bool> onBlockChanged;
   final ValueChanged<String?>? onAdminRoleChanged;
+  final String currentAdminId;
+
+  void _openControls(
+    BuildContext context, {
+    required String adminRole,
+    required bool blocked,
+    required bool canBlock,
+    required bool canChangeRoles,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => _UserControlsSheet(
+        userName: _fallback(user['fullName'], 'Пользователь'),
+        adminRole: adminRole,
+        blocked: blocked,
+        canBlock: canBlock,
+        canChangeRoles: canChangeRoles,
+        onBlockChanged: onBlockChanged,
+        onAdminRoleChanged: onAdminRoleChanged,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1202,6 +1216,10 @@ class _AdminUserCard extends StatelessWidget {
     final bannedUntil = _date(user['bannedUntil']);
     final blocked = bannedUntil != null && bannedUntil.isAfter(DateTime.now());
     final adminRole = _fallback(user['adminRole'], '');
+    final isCurrentAdmin = user['id']?.toString() == currentAdminId;
+    final canBlock = adminRole.isEmpty;
+    final canChangeRoles = onAdminRoleChanged != null && !isCurrentAdmin;
+    final canManage = canBlock || canChangeRoles;
     return SmetchikCard(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1309,65 +1327,24 @@ class _AdminUserCard extends StatelessWidget {
                 ? 'Профи'
                 : 'Базовый',
           );
-          final menu = PopupMenuButton<_UserControlAction>(
-            tooltip: 'Управление пользователем',
-            onSelected: (action) {
-              switch (action) {
-                case _UserControlAction.block:
-                  onBlockChanged(true);
-                case _UserControlAction.unblock:
-                  onBlockChanged(false);
-                case _UserControlAction.owner:
-                  onAdminRoleChanged?.call('owner');
-                case _UserControlAction.support:
-                  onAdminRoleChanged?.call('support');
-                case _UserControlAction.auditor:
-                  onAdminRoleChanged?.call('auditor');
-                case _UserControlAction.removeAdmin:
-                  onAdminRoleChanged?.call(null);
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: blocked
-                    ? _UserControlAction.unblock
-                    : _UserControlAction.block,
-                child: Row(
-                  children: [
-                    Icon(
-                      blocked ? Icons.lock_open_outlined : Icons.block_outlined,
-                      color: blocked ? AppColors.success : AppColors.danger,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(blocked ? 'Разблокировать' : 'Заблокировать'),
-                  ],
-                ),
-              ),
-              if (onAdminRoleChanged != null) const PopupMenuDivider(),
-              if (onAdminRoleChanged != null)
-                const PopupMenuItem(
-                  value: _UserControlAction.owner,
-                  child: Text('Роль: Владелец'),
-                ),
-              if (onAdminRoleChanged != null)
-                const PopupMenuItem(
-                  value: _UserControlAction.support,
-                  child: Text('Роль: Поддержка'),
-                ),
-              if (onAdminRoleChanged != null)
-                const PopupMenuItem(
-                  value: _UserControlAction.auditor,
-                  child: Text('Роль: Аудитор'),
-                ),
-              if (onAdminRoleChanged != null && adminRole.isNotEmpty)
-                const PopupMenuItem(
-                  value: _UserControlAction.removeAdmin,
-                  child: Text('Отозвать админ-доступ'),
-                ),
-            ],
-            icon: const Icon(Icons.more_horiz),
-          );
+          final menu = canManage
+              ? IconButton.outlined(
+                  tooltip: 'Управление пользователем',
+                  style: IconButton.styleFrom(
+                    foregroundColor: AppColors.graphite,
+                    backgroundColor: AppColors.card,
+                    side: const BorderSide(color: AppColors.border),
+                  ),
+                  onPressed: () => _openControls(
+                    context,
+                    adminRole: adminRole,
+                    blocked: blocked,
+                    canBlock: canBlock,
+                    canChangeRoles: canChangeRoles,
+                  ),
+                  icon: const Icon(Icons.tune_rounded),
+                )
+              : null;
           if (narrow) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1379,8 +1356,7 @@ class _AdminUserCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(child: action),
-                    const SizedBox(width: 8),
-                    menu,
+                    if (menu != null) ...[const SizedBox(width: 8), menu],
                   ],
                 ),
               ],
@@ -1393,8 +1369,7 @@ class _AdminUserCard extends StatelessWidget {
               status,
               const SizedBox(width: 10),
               action,
-              const SizedBox(width: 4),
-              menu,
+              if (menu != null) ...[const SizedBox(width: 4), menu],
             ],
           );
         },
@@ -1403,7 +1378,247 @@ class _AdminUserCard extends StatelessWidget {
   }
 }
 
-enum _UserControlAction { block, unblock, owner, support, auditor, removeAdmin }
+class _UserControlsSheet extends StatelessWidget {
+  const _UserControlsSheet({
+    required this.userName,
+    required this.adminRole,
+    required this.blocked,
+    required this.canBlock,
+    required this.canChangeRoles,
+    required this.onBlockChanged,
+    required this.onAdminRoleChanged,
+  });
+
+  final String userName;
+  final String adminRole;
+  final bool blocked;
+  final bool canBlock;
+  final bool canChangeRoles;
+  final ValueChanged<bool> onBlockChanged;
+  final ValueChanged<String?>? onAdminRoleChanged;
+
+  void _closeThen(BuildContext context, VoidCallback action) {
+    Navigator.of(context).pop();
+    action();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 20),
+        decoration: const BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppColors.graphite,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.tune_rounded,
+                      color: AppColors.orange,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Управление доступом',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          userName,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Закрыть',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              if (canBlock) ...[
+                const SizedBox(height: 16),
+                _UserControlActionButton(
+                  icon: blocked
+                      ? Icons.lock_open_rounded
+                      : Icons.block_outlined,
+                  title: blocked
+                      ? 'Разблокировать аккаунт'
+                      : 'Заблокировать аккаунт',
+                  subtitle: blocked
+                      ? 'Пользователь снова сможет войти.'
+                      : 'Доступ к приложению будет закрыт.',
+                  color: blocked ? AppColors.success : AppColors.danger,
+                  background: blocked
+                      ? AppColors.successBg
+                      : AppColors.dangerBg,
+                  onTap: () =>
+                      _closeThen(context, () => onBlockChanged(!blocked)),
+                ),
+              ],
+              if (canChangeRoles) ...[
+                const SizedBox(height: 18),
+                const Text(
+                  'Роль в админ-панели',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final role in const ['owner', 'support', 'auditor']) ...[
+                  _UserControlActionButton(
+                    icon: _adminRoleIcon(role),
+                    title: _adminRoleLabel(role),
+                    subtitle: _adminRoleDescription(role),
+                    selected: adminRole == role,
+                    onTap: adminRole == role
+                        ? null
+                        : () => _closeThen(
+                            context,
+                            () => onAdminRoleChanged?.call(role),
+                          ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                if (adminRole.isNotEmpty)
+                  _UserControlActionButton(
+                    icon: Icons.remove_moderator_outlined,
+                    title: 'Отозвать админ-доступ',
+                    subtitle: 'Оставить доступ только к приложению мастера.',
+                    color: AppColors.danger,
+                    background: AppColors.dangerBg,
+                    onTap: () => _closeThen(
+                      context,
+                      () => onAdminRoleChanged?.call(null),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UserControlActionButton extends StatelessWidget {
+  const _UserControlActionButton({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.color = AppColors.graphite,
+    this.background = AppColors.background,
+    this.selected = false,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final Color background;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeColor = selected ? AppColors.orangeDark : color;
+    return Material(
+      color: selected ? AppColors.orangeLight : background,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? AppColors.orange : AppColors.border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: selected ? Colors.white : AppColors.card,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: activeColor, size: 21),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: activeColor,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (selected)
+                const Icon(Icons.check_circle_rounded, color: AppColors.orange),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _UserMiniPill extends StatelessWidget {
   const _UserMiniPill({
@@ -2593,6 +2808,30 @@ class _AdminDialogFrame extends StatelessWidget {
   }
 }
 
+class _AdminRefreshButton extends StatelessWidget {
+  const _AdminRefreshButton({required this.enabled, required this.onTap});
+
+  final bool enabled;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: enabled ? AppColors.graphite : AppColors.graphite2,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: const SizedBox(
+          width: 46,
+          height: 46,
+          child: Icon(Icons.refresh_rounded, color: AppColors.orange),
+        ),
+      ),
+    );
+  }
+}
+
 class _AdminConfirmDialog extends StatelessWidget {
   const _AdminConfirmDialog({
     required this.icon,
@@ -2827,6 +3066,24 @@ String _adminRoleLabel(String? role) {
     'support' => 'Поддержка',
     'auditor' => 'Аудитор',
     _ => 'Без роли',
+  };
+}
+
+IconData _adminRoleIcon(String role) {
+  return switch (role) {
+    'owner' => Icons.workspace_premium_outlined,
+    'support' => Icons.support_agent_rounded,
+    'auditor' => Icons.fact_check_outlined,
+    _ => Icons.admin_panel_settings_outlined,
+  };
+}
+
+String _adminRoleDescription(String role) {
+  return switch (role) {
+    'owner' => 'Полный доступ к настройкам и сотрудникам.',
+    'support' => 'Пользователи, тарифы и промокоды.',
+    'auditor' => 'Только журнал и подписанные документы.',
+    _ => '',
   };
 }
 
