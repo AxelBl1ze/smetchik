@@ -52,6 +52,7 @@ class ProjectDetailScreen extends ConsumerStatefulWidget {
 class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
   bool _busy = false;
   bool _exporting = false;
+  bool _showMaterials = false;
 
   @override
   Widget build(BuildContext context) {
@@ -121,16 +122,37 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             else
               _LockedAnalyticsCard(onUpgrade: () => context.go('/settings')),
             const SizedBox(height: 16),
+            _ProjectDetailModeSwitcher(
+              showMaterials: _showMaterials,
+              onChanged: (value) => setState(() => _showMaterials = value),
+            ),
+            const SizedBox(height: 12),
             SectionHeader(
-              title: 'Операции',
+              title: _showMaterials ? 'Материалы' : 'Операции',
               action: FilledButton.icon(
-                onPressed: _busy ? null : () => _openTransactionSheet(value),
+                onPressed: _busy
+                    ? null
+                    : _showMaterials
+                    ? () => _openMaterialSheet(value)
+                    : () => _openTransactionSheet(value),
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('Операцию'),
+                label: Text(_showMaterials ? 'Материал' : 'Операцию'),
               ),
             ),
             const SizedBox(height: 8),
-            if (value.transactions.isEmpty)
+            if (_showMaterials && !hasPro)
+              _LockedMaterialsCard(onUpgrade: () => context.go('/settings'))
+            else if (_showMaterials)
+              _MaterialsPanel(
+                materials: value.materials,
+                busy: _busy,
+                onAdd: () => _openMaterialSheet(value),
+                onEdit: (material) => _openMaterialSheet(value, material),
+                onPurchase: (material) =>
+                    _openMaterialPurchaseSheet(value, material),
+                onDelete: _deleteMaterial,
+              )
+            else if (value.transactions.isEmpty)
               EmptyState(
                 icon: Icons.receipt_long_outlined,
                 title: 'Операций пока нет',
@@ -319,6 +341,79 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
           .read(repositoryProvider)
           .deleteProjectTransaction(transaction.id);
       ref.invalidate(projectsProvider);
+      ref.invalidate(projectDetailProvider(widget.projectId));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openMaterialSheet(
+    ProjectDetail detail, [
+    ProjectMaterialModel? material,
+  ]) async {
+    final result = await showModalBottomSheet<ProjectMaterialDraft>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _ProjectMaterialSheet(material: material),
+    );
+    if (result == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(repositoryProvider)
+          .saveProjectMaterial(
+            projectId: detail.project.id,
+            draft: result,
+            materialId: material?.id,
+          );
+      ref.invalidate(projectDetailProvider(detail.project.id));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openMaterialPurchaseSheet(
+    ProjectDetail detail,
+    ProjectMaterialModel material,
+  ) async {
+    final result = await showModalBottomSheet<_MaterialPurchase>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _MaterialPurchaseSheet(material: material),
+    );
+    if (result == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(repositoryProvider)
+          .purchaseProjectMaterial(
+            projectId: detail.project.id,
+            material: material,
+            amount: result.amount,
+            quantity: result.quantity,
+            purchasedAt: result.date,
+            counterparty: result.counterparty,
+          );
+      ref.invalidate(projectDetailProvider(detail.project.id));
+      ref.invalidate(projectsProvider);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteMaterial(ProjectMaterialModel material) async {
+    final confirmed = await showConfirmSheet(
+      context: context,
+      title: 'Удалить материал?',
+      message:
+          'План «${material.title}» будет удалён. Уже учтённая покупка останется в операциях.',
+    );
+    if (!confirmed) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(repositoryProvider).deleteProjectMaterial(material.id);
       ref.invalidate(projectDetailProvider(widget.projectId));
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -801,6 +896,358 @@ class _ProjectSectionTitle extends StatelessWidget {
   }
 }
 
+class _ProjectDetailModeSwitcher extends StatelessWidget {
+  const _ProjectDetailModeSwitcher({
+    required this.showMaterials,
+    required this.onChanged,
+  });
+  final bool showMaterials;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: AppColors.card,
+      border: Border.all(color: AppColors.border),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: _ModeButton(
+            active: !showMaterials,
+            icon: Icons.receipt_long_outlined,
+            label: 'Операции',
+            onTap: () => onChanged(false),
+          ),
+        ),
+        Expanded(
+          child: _ModeButton(
+            active: showMaterials,
+            icon: Icons.inventory_2_outlined,
+            label: 'Материалы',
+            onTap: () => onChanged(true),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ModeButton extends StatelessWidget {
+  const _ModeButton({
+    required this.active,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+  final bool active;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: active ? AppColors.graphite : Colors.transparent,
+    borderRadius: BorderRadius.circular(12),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: active ? AppColors.orange : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: active ? Colors.white : AppColors.textSecondary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _LockedMaterialsCard extends StatelessWidget {
+  const _LockedMaterialsCard({required this.onUpgrade});
+  final VoidCallback onUpgrade;
+  @override
+  Widget build(BuildContext context) => SmetchikCard(
+    child: Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: AppColors.orangeLight,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          child: const Icon(
+            Icons.inventory_2_outlined,
+            color: AppColors.orangeDark,
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'План материалов в Профи',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              SizedBox(height: 3),
+              Text(
+                'Планируйте закупки и автоматически учитывайте фактические траты.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        IconButton(
+          onPressed: onUpgrade,
+          icon: const Icon(
+            Icons.workspace_premium,
+            color: AppColors.orangeDark,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MaterialsPanel extends StatelessWidget {
+  const _MaterialsPanel({
+    required this.materials,
+    required this.busy,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onPurchase,
+    required this.onDelete,
+  });
+  final List<ProjectMaterialModel> materials;
+  final bool busy;
+  final VoidCallback onAdd;
+  final ValueChanged<ProjectMaterialModel> onEdit;
+  final ValueChanged<ProjectMaterialModel> onPurchase;
+  final ValueChanged<ProjectMaterialModel> onDelete;
+  @override
+  Widget build(BuildContext context) {
+    final planned = materials.fold<double>(
+      0,
+      (sum, item) => sum + item.plannedAmount,
+    );
+    final actual = materials.fold<double>(
+      0,
+      (sum, item) => sum + (item.actualAmount ?? 0),
+    );
+    if (materials.isEmpty) {
+      return EmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'Материалов пока нет',
+        body: 'Добавьте план закупок, затем отмечайте фактические покупки.',
+        action: FilledButton.icon(
+          onPressed: busy ? null : onAdd,
+          icon: const Icon(Icons.add),
+          label: const Text('Добавить материал'),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SmetchikCard(
+          child: Row(
+            children: [
+              Expanded(
+                child: _MaterialSummary(
+                  label: 'План',
+                  value: formatMoney(planned),
+                ),
+              ),
+              Container(width: 1, height: 34, color: AppColors.border),
+              Expanded(
+                child: _MaterialSummary(
+                  label: 'Куплено',
+                  value: formatMoney(actual),
+                  accent: AppColors.success,
+                ),
+              ),
+              Container(width: 1, height: 34, color: AppColors.border),
+              Expanded(
+                child: _MaterialSummary(
+                  label: 'Осталось',
+                  value: formatMoney(planned - actual),
+                  accent: planned - actual < 0
+                      ? AppColors.danger
+                      : AppColors.orangeDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final material in materials) ...[
+          _MaterialCard(
+            material: material,
+            busy: busy,
+            onEdit: () => onEdit(material),
+            onPurchase: () => onPurchase(material),
+            onDelete: () => onDelete(material),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _MaterialSummary extends StatelessWidget {
+  const _MaterialSummary({
+    required this.label,
+    required this.value,
+    this.accent,
+  });
+  final String label;
+  final String value;
+  final Color? accent;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            color: AppColors.textHint,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+            color: accent ?? AppColors.graphite,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MaterialCard extends StatelessWidget {
+  const _MaterialCard({
+    required this.material,
+    required this.busy,
+    required this.onEdit,
+    required this.onPurchase,
+    required this.onDelete,
+  });
+  final ProjectMaterialModel material;
+  final bool busy;
+  final VoidCallback onEdit;
+  final VoidCallback onPurchase;
+  final VoidCallback onDelete;
+  @override
+  Widget build(BuildContext context) => SmetchikCard(
+    child: Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: material.isPurchased
+                ? AppColors.success.withValues(alpha: .12)
+                : AppColors.orangeLight,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(
+            material.isPurchased
+                ? Icons.check_circle_outline
+                : Icons.inventory_2_outlined,
+            color: material.isPurchased
+                ? AppColors.success
+                : AppColors.orangeDark,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                material.title,
+                style: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${_formatQuantity(material.plannedQuantity)} ${material.unit} × ${formatMoney(material.plannedUnitPrice)} · план ${formatMoney(material.plannedAmount)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              if (material.isPurchased)
+                Text(
+                  'Куплено: ${formatMoney(material.actualAmount!)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'purchase') {
+              onPurchase();
+            } else if (value == 'edit') {
+              onEdit();
+            } else {
+              onDelete();
+            }
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: 'purchase',
+              child: Text(
+                material.isPurchased ? 'Изменить покупку' : 'Отметить покупку',
+              ),
+            ),
+            const PopupMenuItem(value: 'edit', child: Text('Изменить план')),
+            const PopupMenuItem(value: 'delete', child: Text('Удалить')),
+          ],
+          icon: const Icon(Icons.more_horiz),
+        ),
+      ],
+    ),
+  );
+  static String _formatQuantity(double value) =>
+      value.toString().replaceFirst(RegExp(r'\.0$'), '');
+}
+
 class _TransactionCard extends StatelessWidget {
   const _TransactionCard({
     required this.transaction,
@@ -1147,6 +1594,312 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
       ),
     );
   }
+}
+
+class _ProjectMaterialSheet extends StatefulWidget {
+  const _ProjectMaterialSheet({this.material});
+  final ProjectMaterialModel? material;
+  @override
+  State<_ProjectMaterialSheet> createState() => _ProjectMaterialSheetState();
+}
+
+class _ProjectMaterialSheetState extends State<_ProjectMaterialSheet> {
+  final _title = TextEditingController();
+  final _quantity = TextEditingController();
+  final _unit = TextEditingController();
+  final _price = TextEditingController();
+  final _notes = TextEditingController();
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.material;
+    _title.text = item?.title ?? '';
+    _quantity.text = item == null
+        ? '1'
+        : item.plannedQuantity.toString().replaceFirst(RegExp(r'\.0$'), '');
+    _unit.text = item?.unit ?? 'шт';
+    _price.text = item == null
+        ? ''
+        : item.plannedUnitPrice.toString().replaceFirst(RegExp(r'\.0$'), '');
+    _notes.text = item?.notes ?? '';
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _quantity.dispose();
+    _unit.dispose();
+    _price.dispose();
+    _notes.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _CompactProjectSheet(
+    title: widget.material == null ? 'Новый материал' : 'План материала',
+    subtitle: 'Плановая закупка по объекту',
+    icon: Icons.inventory_2_outlined,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _title,
+          autofocus: true,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            labelText: 'Материал',
+            hintText: 'Кирпич облицовочный',
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _quantity,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Количество'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _unit,
+                decoration: const InputDecoration(
+                  labelText: 'Единица',
+                  hintText: 'шт., м³',
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _price,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Плановая цена за единицу',
+            suffixText: '₽',
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _notes,
+          minLines: 2,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Комментарий',
+            hintText: 'Необязательно',
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.save_outlined),
+          label: Text(
+            widget.material == null ? 'Добавить материал' : 'Сохранить план',
+          ),
+        ),
+      ],
+    ),
+  );
+  void _submit() {
+    final title = _title.text.trim();
+    if (title.isEmpty) return;
+    Navigator.of(context).pop(
+      ProjectMaterialDraft(
+        title: title,
+        plannedQuantity:
+            double.tryParse(_quantity.text.replaceAll(',', '.')) ?? 1,
+        unit: _unit.text,
+        plannedUnitPrice:
+            double.tryParse(_price.text.replaceAll(',', '.')) ?? 0,
+        notes: _notes.text,
+      ),
+    );
+  }
+}
+
+class _MaterialPurchase {
+  const _MaterialPurchase({
+    required this.amount,
+    required this.quantity,
+    required this.date,
+    this.counterparty,
+  });
+  final double amount;
+  final double quantity;
+  final DateTime date;
+  final String? counterparty;
+}
+
+class _MaterialPurchaseSheet extends StatefulWidget {
+  const _MaterialPurchaseSheet({required this.material});
+  final ProjectMaterialModel material;
+  @override
+  State<_MaterialPurchaseSheet> createState() => _MaterialPurchaseSheetState();
+}
+
+class _MaterialPurchaseSheetState extends State<_MaterialPurchaseSheet> {
+  final _amount = TextEditingController();
+  final _quantity = TextEditingController();
+  final _counterparty = TextEditingController();
+  late DateTime _date;
+  @override
+  void initState() {
+    super.initState();
+    final item = widget.material;
+    _amount.text = (item.actualAmount ?? item.plannedAmount)
+        .toString()
+        .replaceFirst(RegExp(r'\.0$'), '');
+    _quantity.text = (item.actualQuantity ?? item.plannedQuantity)
+        .toString()
+        .replaceFirst(RegExp(r'\.0$'), '');
+    _date = item.purchasedAt ?? DateTime.now();
+  }
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _quantity.dispose();
+    _counterparty.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _CompactProjectSheet(
+    title: 'Отметить покупку',
+    subtitle: widget.material.title,
+    icon: Icons.shopping_bag_outlined,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _amount,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Фактическая сумма',
+            suffixText: '₽',
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _quantity,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Купленное количество',
+            suffixText: widget.material.unit,
+          ),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _counterparty,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Поставщик',
+            hintText: 'Необязательно',
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: _pickDate,
+          icon: const Icon(Icons.calendar_month_outlined),
+          label: Text(formatDate(_date)),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.check),
+          label: const Text('Учесть покупку'),
+        ),
+      ],
+    ),
+  );
+  Future<void> _pickDate() async {
+    final date = await showSmetchikDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      title: 'Дата покупки',
+    );
+    if (date != null) setState(() => _date = date);
+  }
+
+  void _submit() => Navigator.of(context).pop(
+    _MaterialPurchase(
+      amount: double.tryParse(_amount.text.replaceAll(',', '.')) ?? 0,
+      quantity: double.tryParse(_quantity.text.replaceAll(',', '.')) ?? 1,
+      date: _date,
+      counterparty: _counterparty.text.trim().isEmpty
+          ? null
+          : _counterparty.text.trim(),
+    ),
+  );
+}
+
+class _CompactProjectSheet extends StatelessWidget {
+  const _CompactProjectSheet({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.child,
+  });
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ProjectSectionTitle(
+                          icon: icon,
+                          title: title,
+                          subtitle: subtitle,
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        tooltip: 'Закрыть',
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  child,
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _ProjectExportSheet extends StatelessWidget {

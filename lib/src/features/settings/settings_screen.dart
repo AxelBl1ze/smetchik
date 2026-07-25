@@ -237,6 +237,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            _TeamSubscriptionCard(
+              profile: value,
+              workspace: ref.watch(teamWorkspaceProvider),
+              members: ref.watch(teamMembersProvider),
+              invites: ref.watch(teamInvitesProvider),
+              busy: _saving,
+              onOpenPlans: () => _showTariffSheet(value),
+              onCreate: _createTeam,
+              onInvite: _inviteTeamMember,
+              onRemove: _removeTeamMember,
+            ),
+            _IncomingTeamInvitesCard(
+              invites: ref.watch(incomingTeamInvitesProvider),
+              busy: _saving,
+              onAccept: _acceptTeamInvite,
+            ),
+            const SizedBox(height: 14),
             _PdfSettingsLauncherCard(
               profile: value,
               template: _pdfTemplate,
@@ -536,7 +553,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _changePlan(String plan) async {
-    if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.pro) {
+    if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.pro ||
+        SubscriptionPlan.normalize(plan) == SubscriptionPlan.team) {
       await _showPromoCodeSheet();
       return;
     }
@@ -548,6 +566,104 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _createTeam() async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(repositoryProvider).createTeam('Моя бригада');
+      ref.invalidate(teamWorkspaceProvider);
+      ref.invalidate(teamMembersProvider);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error
+                  .toString()
+                  .replaceFirst('PostgrestException(message: ', '')
+                  .replaceAll(')', ''),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _inviteTeamMember() async {
+    final controller = TextEditingController();
+    final email = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _TeamInviteSheet(
+        controller: controller,
+        onConfirm: () => Navigator.of(sheetContext).pop(controller.text.trim()),
+      ),
+    );
+    controller.dispose();
+    if (email == null || email.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(repositoryProvider).inviteTeamMember(email);
+      ref.invalidate(teamInvitesProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Приглашение создано.')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _removeTeamMember(String memberId) async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(repositoryProvider).removeTeamMember(memberId);
+      ref.invalidate(teamWorkspaceProvider);
+      ref.invalidate(teamMembersProvider);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _acceptTeamInvite(String inviteId) async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(repositoryProvider).acceptTeamInvite(inviteId);
+      ref.invalidate(profileProvider);
+      ref.invalidate(teamWorkspaceProvider);
+      ref.invalidate(teamMembersProvider);
+      ref.invalidate(incomingTeamInvitesProvider);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Вы присоединились к бригаде.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _showPromoCodeSheet() async {
@@ -4632,6 +4748,403 @@ class _TariffPlanCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TeamSubscriptionCard extends StatelessWidget {
+  const _TeamSubscriptionCard({
+    required this.profile,
+    required this.workspace,
+    required this.members,
+    required this.invites,
+    required this.busy,
+    required this.onOpenPlans,
+    required this.onCreate,
+    required this.onInvite,
+    required this.onRemove,
+  });
+
+  final ProfileModel? profile;
+  final AsyncValue<TeamWorkspaceModel?> workspace;
+  final AsyncValue<List<TeamMemberModel>> members;
+  final AsyncValue<List<TeamInviteModel>> invites;
+  final bool busy;
+  final VoidCallback onOpenPlans;
+  final VoidCallback onCreate;
+  final VoidCallback onInvite;
+  final ValueChanged<String> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final isTeam =
+        profile?.hasActivePro == true &&
+        profile?.effectiveSubscriptionPlan == SubscriptionPlan.team;
+    if (!isTeam) {
+      return SmetchikCard(
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.orangeLight,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.groups_2_outlined,
+                color: AppColors.orangeDark,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Бригада',
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                  SizedBox(height: 3),
+                  Text(
+                    'Один тариф для вас и ещё 5 мастеров.',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              onPressed: onOpenPlans,
+              tooltip: 'Тариф Бригада',
+              icon: const Icon(Icons.arrow_forward_ios, size: 18),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return workspace.when(
+      loading: () => const SmetchikCard(
+        child: SizedBox(
+          height: 64,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ),
+      error: (_, _) => SmetchikCard(
+        child: Row(
+          children: [
+            const Icon(Icons.groups_2_outlined, color: AppColors.orangeDark),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text('Бригада будет доступна после обновления данных.'),
+            ),
+            IconButton(onPressed: onCreate, icon: const Icon(Icons.refresh)),
+          ],
+        ),
+      ),
+      data: (team) {
+        if (team == null) {
+          return SmetchikCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _CardTitle(
+                  icon: Icons.groups_2_outlined,
+                  title: 'Бригада',
+                  subtitle: 'Тариф для команды до 6 мастеров',
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Создайте пространство, затем добавляйте мастеров по email. Их клиенты, сметы и подписи останутся личными.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: busy ? null : onCreate,
+                  icon: const Icon(Icons.group_add_outlined),
+                  label: const Text('Создать бригаду'),
+                ),
+              ],
+            ),
+          );
+        }
+        final people = members.asData?.value ?? const <TeamMemberModel>[];
+        final pending = invites.asData?.value ?? const <TeamInviteModel>[];
+        return SmetchikCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _CardTitle(
+                icon: Icons.groups_2_outlined,
+                title: team.name,
+                subtitle: team.isOwner
+                    ? '${team.seatsUsed} из ${team.maxMembers} мест занято'
+                    : 'Вы участник бригады',
+              ),
+              const SizedBox(height: 12),
+              for (final member in people) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 9,
+                  ),
+                  margin: const EdgeInsets.only(bottom: 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: AppColors.orangeLight,
+                        child: Text(
+                          member.name.isEmpty
+                              ? '?'
+                              : member.name.substring(0, 1).toUpperCase(),
+                          style: const TextStyle(
+                            color: AppColors.orangeDark,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              member.name.isEmpty ? member.email : member.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            if (member.name.isNotEmpty)
+                              Text(
+                                member.email,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        member.isOwner ? 'Владелец' : 'Мастер',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (team.isOwner && !member.isOwner)
+                        IconButton(
+                          onPressed: busy
+                              ? null
+                              : () => onRemove(member.userId),
+                          tooltip: 'Убрать из бригады',
+                          icon: const Icon(Icons.close, size: 18),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              for (final invite in pending)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 9,
+                  ),
+                  margin: const EdgeInsets.only(bottom: 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.orangeLight,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.mail_outline,
+                        size: 18,
+                        color: AppColors.orangeDark,
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          invite.email,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                      const Text(
+                        'ожидает',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.orangeDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (team.isOwner && team.seatsUsed < team.maxMembers) ...[
+                const SizedBox(height: 4),
+                OutlinedButton.icon(
+                  onPressed: busy ? null : onInvite,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Пригласить мастера'),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TeamInviteSheet extends StatelessWidget {
+  const _TeamInviteSheet({required this.controller, required this.onConfirm});
+  final TextEditingController controller;
+  final VoidCallback onConfirm;
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: false,
+    child: Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        decoration: const BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Пригласить мастера',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'После регистрации на этот email приглашение появится в настройках мастера.',
+              style: TextStyle(color: AppColors.textSecondary, height: 1.3),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email мастера',
+                prefixIcon: Icon(Icons.mail_outline),
+              ),
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: onConfirm,
+              icon: const Icon(Icons.person_add_alt_1),
+              label: const Text('Создать приглашение'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _IncomingTeamInvitesCard extends StatelessWidget {
+  const _IncomingTeamInvitesCard({
+    required this.invites,
+    required this.busy,
+    required this.onAccept,
+  });
+  final AsyncValue<List<IncomingTeamInviteModel>> invites;
+  final bool busy;
+  final ValueChanged<String> onAccept;
+
+  @override
+  Widget build(BuildContext context) => invites.when(
+    loading: () => const SizedBox.shrink(),
+    error: (_, _) => const SizedBox.shrink(),
+    data: (items) {
+      if (items.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: SmetchikCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _CardTitle(
+                icon: Icons.mark_email_unread_outlined,
+                title: 'Приглашение в бригаду',
+                subtitle: 'Владелец оплатит тариф за вашу учётную запись',
+              ),
+              const SizedBox(height: 12),
+              for (final invite in items) ...[
+                Container(
+                  padding: const EdgeInsets.all(11),
+                  decoration: BoxDecoration(
+                    color: AppColors.orangeLight,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.groups_2_outlined,
+                        color: AppColors.orangeDark,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              invite.teamName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            Text(
+                              'Пригласил: ${invite.ownerName}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: busy ? null : () => onAccept(invite.id),
+                        child: const Text('Принять'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 class _TariffFeature extends StatelessWidget {

@@ -74,12 +74,14 @@ void main() {
     await tester.tap(find.byTooltip('Закрыть').first);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Операцию'));
+    final addOperation = find.text('Операцию');
+    await tester.ensureVisible(addOperation);
+    await tester.tap(addOperation);
     await tester.pumpAndSettle();
     expect(find.text('Новая операция'), findsOneWidget);
-    expect(find.text(ProjectTransactionCategory.materials), findsOneWidget);
+    expect(find.text(ProjectTransactionCategory.materials), findsWidgets);
 
-    await tester.tap(find.text(ProjectTransactionCategory.materials));
+    await tester.tap(find.text(ProjectTransactionCategory.materials).last);
     await tester.pumpAndSettle();
     expect(find.text('Категория расхода'), findsOneWidget);
     expect(

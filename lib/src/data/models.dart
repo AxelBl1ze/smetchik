@@ -194,13 +194,14 @@ class SubscriptionPlan {
 
   static const basic = 'basic';
   static const pro = 'pro';
+  static const team = 'team';
 
-  static const values = [basic, pro];
+  static const values = [basic, pro, team];
 
   static String normalize(String? value) {
     return switch ((value ?? '').trim()) {
       pro => pro,
-      'team' => pro,
+      team => team,
       _ => basic,
     };
   }
@@ -208,6 +209,7 @@ class SubscriptionPlan {
   static String label(String value) {
     return switch (normalize(value)) {
       pro => 'Профи',
+      team => 'Бригада',
       _ => 'Базовый',
     };
   }
@@ -215,6 +217,7 @@ class SubscriptionPlan {
   static String price(String value) {
     return switch (normalize(value)) {
       pro => '399 ₽/мес',
+      team => '1 490 ₽/мес',
       _ => '0 ₽',
     };
   }
@@ -222,6 +225,7 @@ class SubscriptionPlan {
   static String caption(String value) {
     return switch (normalize(value)) {
       pro => 'для активной работы каждый день',
+      team => 'для команды до 6 мастеров',
       _ => 'для старта и первых клиентов',
     };
   }
@@ -237,6 +241,13 @@ class SubscriptionPlan {
         'Безлимитные объекты и учёт затрат',
         'Аналитика прибыли по объектам',
         'Экспорт объектов в Excel и PDF',
+      ],
+      team => const [
+        'Всё из тарифа Профи',
+        'До 6 мастеров на одном тарифе',
+        'Приглашения в бригаду по email',
+        'Личные клиенты и сметы каждого мастера',
+        'Безлимитные объекты и учёт материалов',
       ],
       _ => const [
         'До 10 новых смет в месяц',
@@ -467,15 +478,18 @@ class ProfileModel {
 
   bool get hasActivePro {
     final status = SubscriptionStatus.normalize(subscriptionStatus);
-    return SubscriptionPlan.normalize(subscriptionPlan) ==
-            SubscriptionPlan.pro &&
+    return (SubscriptionPlan.normalize(subscriptionPlan) ==
+                SubscriptionPlan.pro ||
+            SubscriptionPlan.normalize(subscriptionPlan) ==
+                SubscriptionPlan.team) &&
         (status == SubscriptionStatus.active ||
             status == SubscriptionStatus.trialing) &&
         !isSubscriptionExpired;
   }
 
-  String get effectiveSubscriptionPlan =>
-      hasActivePro ? SubscriptionPlan.pro : SubscriptionPlan.basic;
+  String get effectiveSubscriptionPlan => hasActivePro
+      ? SubscriptionPlan.normalize(subscriptionPlan)
+      : SubscriptionPlan.basic;
 
   int? get monthlyEstimateLimit =>
       hasActivePro ? null : basicMonthlyEstimateLimit;
@@ -809,11 +823,69 @@ class ProjectTransactionModel {
   }
 }
 
+class ProjectMaterialModel {
+  const ProjectMaterialModel({
+    required this.id,
+    required this.projectId,
+    required this.title,
+    required this.plannedQuantity,
+    required this.unit,
+    required this.plannedUnitPrice,
+    this.actualQuantity,
+    this.actualAmount,
+    this.purchasedAt,
+    this.purchaseTransactionId,
+    this.notes,
+  });
+
+  final String id;
+  final String projectId;
+  final String title;
+  final double plannedQuantity;
+  final String unit;
+  final double plannedUnitPrice;
+  final double? actualQuantity;
+  final double? actualAmount;
+  final DateTime? purchasedAt;
+  final String? purchaseTransactionId;
+  final String? notes;
+
+  double get plannedAmount => plannedQuantity * plannedUnitPrice;
+  bool get isPurchased => actualAmount != null;
+
+  factory ProjectMaterialModel.fromMap(Map<String, dynamic> map) {
+    return ProjectMaterialModel(
+      id: map['id'] as String,
+      projectId: map['project_id'] as String,
+      title: (map['title'] as String?) ?? '',
+      plannedQuantity: asDouble(map['planned_quantity']),
+      unit: (map['unit'] as String?) ?? 'шт',
+      plannedUnitPrice: asDouble(map['planned_unit_price']),
+      actualQuantity: map['actual_quantity'] == null
+          ? null
+          : asDouble(map['actual_quantity']),
+      actualAmount: map['actual_amount'] == null
+          ? null
+          : asDouble(map['actual_amount']),
+      purchasedAt: map['purchased_at'] == null
+          ? null
+          : asDate(map['purchased_at']),
+      purchaseTransactionId: map['purchase_transaction_id'] as String?,
+      notes: map['notes'] as String?,
+    );
+  }
+}
+
 class ProjectDetail {
-  const ProjectDetail({required this.project, required this.transactions});
+  const ProjectDetail({
+    required this.project,
+    required this.transactions,
+    this.materials = const [],
+  });
 
   final ProjectModel project;
   final List<ProjectTransactionModel> transactions;
+  final List<ProjectMaterialModel> materials;
 }
 
 class ProjectDraft {
@@ -860,6 +932,115 @@ class ProjectTransactionDraft {
   final DateTime transactionDate;
   final String? counterparty;
   final String? notes;
+}
+
+class ProjectMaterialDraft {
+  const ProjectMaterialDraft({
+    required this.title,
+    required this.plannedQuantity,
+    required this.unit,
+    required this.plannedUnitPrice,
+    this.notes,
+  });
+
+  final String title;
+  final double plannedQuantity;
+  final String unit;
+  final double plannedUnitPrice;
+  final String? notes;
+}
+
+class TeamWorkspaceModel {
+  const TeamWorkspaceModel({
+    required this.id,
+    required this.name,
+    required this.ownerUserId,
+    required this.role,
+    required this.maxMembers,
+    required this.seatsUsed,
+    required this.isActive,
+    this.renewsAt,
+  });
+
+  final String id;
+  final String name;
+  final String ownerUserId;
+  final String role;
+  final int maxMembers;
+  final int seatsUsed;
+  final bool isActive;
+  final DateTime? renewsAt;
+  bool get isOwner => role == 'owner';
+
+  factory TeamWorkspaceModel.fromMap(Map<String, dynamic> map) =>
+      TeamWorkspaceModel(
+        id: map['team_id'] as String,
+        name: (map['team_name'] as String?) ?? 'Моя бригада',
+        ownerUserId: map['owner_user_id'] as String,
+        role: (map['member_role'] as String?) ?? 'member',
+        maxMembers: (map['max_members'] as num?)?.toInt() ?? 6,
+        seatsUsed: (map['seats_used'] as num?)?.toInt() ?? 1,
+        isActive: map['is_active'] == true,
+        renewsAt: map['subscription_renews_at'] == null
+            ? null
+            : asDate(map['subscription_renews_at']),
+      );
+}
+
+class TeamMemberModel {
+  const TeamMemberModel({
+    required this.userId,
+    required this.name,
+    required this.email,
+    required this.role,
+  });
+  final String userId;
+  final String name;
+  final String email;
+  final String role;
+  bool get isOwner => role == 'owner';
+  factory TeamMemberModel.fromMap(Map<String, dynamic> map) => TeamMemberModel(
+    userId: map['user_id'] as String,
+    name: (map['member_name'] as String?) ?? '',
+    email: (map['member_email'] as String?) ?? '',
+    role: (map['member_role'] as String?) ?? 'member',
+  );
+}
+
+class TeamInviteModel {
+  const TeamInviteModel({
+    required this.id,
+    required this.email,
+    required this.expiresAt,
+  });
+  final String id;
+  final String email;
+  final DateTime expiresAt;
+  factory TeamInviteModel.fromMap(Map<String, dynamic> map) => TeamInviteModel(
+    id: map['invite_id'] as String,
+    email: (map['invited_email'] as String?) ?? '',
+    expiresAt: asDate(map['expires_at']),
+  );
+}
+
+class IncomingTeamInviteModel {
+  const IncomingTeamInviteModel({
+    required this.id,
+    required this.teamName,
+    required this.ownerName,
+    required this.expiresAt,
+  });
+  final String id;
+  final String teamName;
+  final String ownerName;
+  final DateTime expiresAt;
+  factory IncomingTeamInviteModel.fromMap(Map<String, dynamic> map) =>
+      IncomingTeamInviteModel(
+        id: map['invite_id'] as String,
+        teamName: (map['team_name'] as String?) ?? 'Бригада',
+        ownerName: (map['owner_name'] as String?) ?? 'Владелец',
+        expiresAt: asDate(map['expires_at']),
+      );
 }
 
 class EstimateModel {

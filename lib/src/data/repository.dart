@@ -50,6 +50,23 @@ final projectDetailProvider = FutureProvider.family<ProjectDetail, String>(
   (ref, id) => ref.watch(repositoryProvider).fetchProjectDetail(id),
 );
 
+final teamWorkspaceProvider = FutureProvider<TeamWorkspaceModel?>((ref) {
+  return ref.watch(repositoryProvider).fetchTeamWorkspace();
+});
+
+final teamMembersProvider = FutureProvider<List<TeamMemberModel>>((ref) {
+  return ref.watch(repositoryProvider).fetchTeamMembers();
+});
+
+final teamInvitesProvider = FutureProvider<List<TeamInviteModel>>((ref) {
+  return ref.watch(repositoryProvider).fetchTeamInvites();
+});
+
+final incomingTeamInvitesProvider =
+    FutureProvider<List<IncomingTeamInviteModel>>((ref) {
+      return ref.watch(repositoryProvider).fetchIncomingTeamInvites();
+    });
+
 final estimateDetailProvider = FutureProvider.family<EstimateDetail, String>((
   ref,
   id,
@@ -761,9 +778,16 @@ class SmetchikRepository {
           .eq('user_id', _userId)
           .order('transaction_date', ascending: false)
           .order('created_at', ascending: false);
+      final materialRows = await _client
+          .from('project_materials')
+          .select()
+          .eq('project_id', projectId)
+          .eq('user_id', _userId)
+          .order('created_at', ascending: false);
       final data = {
         'project': Map<String, dynamic>.from(projectRow),
         'transactions': _asMaps(transactionRows),
+        'materials': _asMaps(materialRows),
       };
       await _localCache.write(_cacheKey('project.$projectId'), data);
       return _projectDetailFromCache(data);
@@ -784,6 +808,12 @@ class SmetchikRepository {
     final transactions = transactionRows
         .map(ProjectTransactionModel.fromMap)
         .toList();
+    final materialRows = data['materials'] is List
+        ? (data['materials'] as List)
+              .whereType<Map>()
+              .map((row) => Map<String, dynamic>.from(row))
+              .toList()
+        : const <Map<String, dynamic>>[];
     final incomeAmount = transactions
         .where((item) => item.type == ProjectTransactionType.income)
         .fold<double>(0, (sum, item) => sum + item.amount);
@@ -795,6 +825,7 @@ class SmetchikRepository {
         Map<String, dynamic>.from(data['project'] as Map),
       ).copyWith(incomeAmount: incomeAmount, expenseAmount: expenseAmount),
       transactions: transactions,
+      materials: materialRows.map(ProjectMaterialModel.fromMap).toList(),
     );
   }
 
@@ -919,6 +950,141 @@ class SmetchikRepository {
         .delete()
         .eq('id', transactionId)
         .eq('user_id', _userId);
+  }
+
+  Future<void> saveProjectMaterial({
+    required String projectId,
+    required ProjectMaterialDraft draft,
+    String? materialId,
+  }) async {
+    final payload = {
+      'user_id': _userId,
+      'project_id': projectId,
+      'title': draft.title.trim(),
+      'planned_quantity': draft.plannedQuantity,
+      'unit': draft.unit.trim().isEmpty ? 'шт' : draft.unit.trim(),
+      'planned_unit_price': draft.plannedUnitPrice,
+      'notes': _blankToNull(draft.notes),
+    };
+    if (materialId == null) {
+      await _client.from('project_materials').insert(payload);
+      return;
+    }
+    await _client
+        .from('project_materials')
+        .update(payload)
+        .eq('id', materialId)
+        .eq('project_id', projectId)
+        .eq('user_id', _userId);
+  }
+
+  Future<void> purchaseProjectMaterial({
+    required String projectId,
+    required ProjectMaterialModel material,
+    required double amount,
+    required double quantity,
+    required DateTime purchasedAt,
+    String? counterparty,
+  }) async {
+    final transaction = ProjectTransactionDraft(
+      type: ProjectTransactionType.expense,
+      category: ProjectTransactionCategory.materials,
+      title: material.title,
+      amount: amount,
+      quantity: quantity,
+      unit: material.unit,
+      transactionDate: purchasedAt,
+      counterparty: counterparty,
+      notes: material.notes,
+    );
+    String transactionId = material.purchaseTransactionId ?? '';
+    if (transactionId.isEmpty) {
+      final row = await _client
+          .from('project_transactions')
+          .insert({
+            'user_id': _userId,
+            'project_id': projectId,
+            'transaction_type': transaction.type,
+            'category': transaction.category,
+            'title': transaction.title,
+            'amount': transaction.amount,
+            'quantity': transaction.quantity,
+            'unit': transaction.unit,
+            'transaction_date': transaction.transactionDate
+                .toIso8601String()
+                .split('T')
+                .first,
+            'counterparty': _blankToNull(transaction.counterparty),
+            'notes': _blankToNull(transaction.notes),
+          })
+          .select('id')
+          .single();
+      transactionId = row['id'] as String;
+    } else {
+      await saveProjectTransaction(
+        projectId: projectId,
+        draft: transaction,
+        transactionId: transactionId,
+      );
+    }
+    await _client
+        .from('project_materials')
+        .update({
+          'actual_quantity': quantity,
+          'actual_amount': amount,
+          'purchased_at': purchasedAt.toIso8601String().split('T').first,
+          'purchase_transaction_id': transactionId,
+        })
+        .eq('id', material.id)
+        .eq('user_id', _userId);
+  }
+
+  Future<void> deleteProjectMaterial(String materialId) {
+    return _client
+        .from('project_materials')
+        .delete()
+        .eq('id', materialId)
+        .eq('user_id', _userId);
+  }
+
+  Future<TeamWorkspaceModel?> fetchTeamWorkspace() async {
+    final rows = await _client.rpc('team_workspace');
+    final maps = _asMaps(rows);
+    return maps.isEmpty ? null : TeamWorkspaceModel.fromMap(maps.first);
+  }
+
+  Future<List<TeamMemberModel>> fetchTeamMembers() async {
+    return _asMaps(
+      await _client.rpc('team_members_list'),
+    ).map(TeamMemberModel.fromMap).toList();
+  }
+
+  Future<List<TeamInviteModel>> fetchTeamInvites() async {
+    return _asMaps(
+      await _client.rpc('team_invites_list'),
+    ).map(TeamInviteModel.fromMap).toList();
+  }
+
+  Future<List<IncomingTeamInviteModel>> fetchIncomingTeamInvites() async {
+    return _asMaps(
+      await _client.rpc('incoming_team_invites'),
+    ).map(IncomingTeamInviteModel.fromMap).toList();
+  }
+
+  Future<void> createTeam(String name) async {
+    await _client.rpc('create_team', params: {'p_name': name});
+  }
+
+  Future<void> inviteTeamMember(String email) async {
+    await _client.rpc('invite_team_member', params: {'p_email': email});
+  }
+
+  Future<void> removeTeamMember(String memberId) async {
+    await _client.rpc('remove_team_member', params: {'p_member_id': memberId});
+  }
+
+  Future<void> acceptTeamInvite(String inviteId) async {
+    await _client.rpc('accept_team_invite', params: {'p_invite_id': inviteId});
   }
 
   Future<void> _ensureCanCreateProject({String? excludingProjectId}) async {
