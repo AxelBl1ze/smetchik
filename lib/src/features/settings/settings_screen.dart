@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -227,6 +229,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _SettingsFeatureSheet(
         maxWidth: 620,
@@ -504,6 +508,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         onClose: () => Navigator.of(sheetContext).pop(),
         child: Consumer(
           builder: (context, ref, _) {
+            Future<void> closeThenOpen(Future<void> Function() action) async {
+              Navigator.of(sheetContext).pop();
+              await Future<void>.delayed(const Duration(milliseconds: 220));
+              if (mounted) await action();
+            }
+
             final estimates = ref.watch(estimatesProvider);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -520,16 +530,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     estimates: items,
                     busy: _saving,
                     framed: true,
-                    onTap: () => _showTariffSheet(profile),
-                    onRedeem: _showPromoCodeSheet,
+                    onTap: () => unawaited(
+                      closeThenOpen(() => _showTariffSheet(profile)),
+                    ),
+                    onRedeem: () =>
+                        unawaited(closeThenOpen(_showPromoCodeSheet)),
                   ),
                   loading: () => _SubscriptionCard(
                     profile: profile,
                     estimates: const [],
                     busy: true,
                     framed: true,
-                    onTap: () => _showTariffSheet(profile),
-                    onRedeem: _showPromoCodeSheet,
+                    onTap: () => unawaited(
+                      closeThenOpen(() => _showTariffSheet(profile)),
+                    ),
+                    onRedeem: () =>
+                        unawaited(closeThenOpen(_showPromoCodeSheet)),
                   ),
                   error: (_, _) => const SizedBox.shrink(),
                 ),
@@ -541,9 +557,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   invites: ref.watch(teamInvitesProvider),
                   busy: _saving,
                   framed: true,
-                  onOpenPlans: () => _showTariffSheet(profile),
+                  onOpenPlans: () =>
+                      unawaited(closeThenOpen(() => _showTariffSheet(profile))),
                   onCreate: _createTeam,
-                  onInvite: _inviteTeamMember,
+                  onInvite: () => unawaited(closeThenOpen(_inviteTeamMember)),
                   onRemove: _removeTeamMember,
                   onCancelInvite: _cancelTeamInvite,
                 ),
@@ -627,9 +644,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (sheetContext) => _TariffSheet(
         currentPlan:
             profile?.effectiveSubscriptionPlan ?? SubscriptionPlan.basic,
-        onSelect: (plan, period) {
+        onSelect: (plan, period) async {
           Navigator.of(sheetContext).pop();
-          _changePlan(plan, period);
+          await Future<void>.delayed(const Duration(milliseconds: 220));
+          if (mounted) await _changePlan(plan, period);
         },
       ),
     );
@@ -657,7 +675,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _showCheckout(String plan, {required String period}) async {
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _MockCheckoutSheet(
         plan: plan,
@@ -4630,16 +4651,17 @@ class _TariffSheetState extends State<_TariffSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final sheetHeight = MediaQuery.sizeOf(context).height * 0.78;
+    final screen = MediaQuery.sizeOf(context);
+    final sheetHeight = math.min(640.0, screen.height * 0.72);
     return SafeArea(
       top: true,
       child: Align(
         alignment: Alignment.bottomCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
+          constraints: const BoxConstraints(maxWidth: 520),
           child: Container(
             height: sheetHeight,
-            margin: const EdgeInsets.all(10),
+            margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
             decoration: BoxDecoration(
               color: AppColors.card,
               borderRadius: BorderRadius.circular(24),
@@ -5449,7 +5471,7 @@ class _TeamSubscriptionCard extends StatelessWidget {
                 const _CardTitle(
                   icon: Icons.groups_2_outlined,
                   title: 'Бригада',
-                  subtitle: 'Тариф для команды до 6 мастеров',
+                  subtitle: 'Общее пространство для вашей команды',
                 ),
                 const SizedBox(height: 12),
                 const Text(
@@ -5471,6 +5493,9 @@ class _TeamSubscriptionCard extends StatelessWidget {
         }
         final people = members.asData?.value ?? const <TeamMemberModel>[];
         final pending = invites.asData?.value ?? const <TeamInviteModel>[];
+        final seatsUsed = team.isOwner && team.seatsUsed < 1
+            ? 1
+            : team.seatsUsed;
         return frame(
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -5479,7 +5504,7 @@ class _TeamSubscriptionCard extends StatelessWidget {
                 icon: Icons.groups_2_outlined,
                 title: team.name,
                 subtitle: team.isOwner
-                    ? '${team.seatsUsed} из ${team.maxMembers} мест занято'
+                    ? '$seatsUsed из ${team.maxMembers} мест занято'
                     : 'Вы участник бригады',
               ),
               const SizedBox(height: 12),

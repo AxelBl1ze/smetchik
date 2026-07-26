@@ -10,14 +10,19 @@ Future<void> showUpgradeSheet({
 }) {
   return showModalBottomSheet<void>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
+    isDismissible: true,
+    enableDrag: true,
     backgroundColor: Colors.transparent,
     builder: (sheetContext) => _UpgradeSheet(
       title: title,
       message: message,
       onOpenPlans: () {
         Navigator.of(sheetContext).pop();
-        onOpenPlans();
+        Future<void>.delayed(const Duration(milliseconds: 220)).then((_) {
+          onOpenPlans();
+        });
       },
     ),
   );

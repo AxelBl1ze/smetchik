@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/legacy.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_config.dart';
@@ -25,13 +26,27 @@ class AuthController extends ChangeNotifier {
       if (event.event == AuthChangeEvent.signedOut) {
         isPasswordRecovery = false;
         user = null;
+        _acceptIncomingSessions = false;
         notifyListeners();
         return;
       }
       final nextUser = event.session?.user ?? _client!.auth.currentUser;
+      if (!_acceptIncomingSessions) {
+        final expectedEmail = _expectedEmail;
+        if (expectedEmail != null &&
+            nextUser?.email?.trim().toLowerCase() == expectedEmail) {
+          user = nextUser;
+          _acceptIncomingSessions = true;
+          notifyListeners();
+          return;
+        }
+        if (nextUser != null) unawaited(_discardUnexpectedSession());
+        return;
+      }
       final expectedEmail = _expectedEmail;
       if (expectedEmail != null &&
           nextUser?.email?.trim().toLowerCase() != expectedEmail) {
+        unawaited(_discardUnexpectedSession());
         return;
       }
       user = nextUser;
@@ -48,6 +63,7 @@ class AuthController extends ChangeNotifier {
   String? _phoneForRequest;
   String? _expectedEmail;
   bool _ignoringAuthEvents = false;
+  bool _acceptIncomingSessions = true;
 
   bool get isLoggedIn => user != null;
 
@@ -71,6 +87,7 @@ class AuthController extends ChangeNotifier {
       }
       user = response.user;
       _expectedEmail = signedInEmail;
+      _acceptIncomingSessions = true;
     });
   }
 
@@ -110,6 +127,7 @@ class AuthController extends ChangeNotifier {
         );
       }
       if (response.session == null && response.user != null) {
+        _acceptIncomingSessions = false;
         return SignUpResult.needsEmailConfirmation;
       }
       if (response.session != null) {
@@ -123,6 +141,7 @@ class AuthController extends ChangeNotifier {
         }
         user = response.session!.user;
         _expectedEmail = signedUpEmail;
+        _acceptIncomingSessions = true;
       }
       return SignUpResult.signedIn;
     });
@@ -139,6 +158,8 @@ class AuthController extends ChangeNotifier {
     required String code,
   }) async {
     await _run(() async {
+      await _clearLocalSession();
+      _expectedEmail = email.trim().toLowerCase();
       final response = await _client!.auth.verifyOTP(
         email: email.trim(),
         token: code.trim(),
@@ -151,6 +172,8 @@ class AuthController extends ChangeNotifier {
         throw const AuthException('Код не подтвердил указанный email.');
       }
       user = response.user;
+      _expectedEmail = signedInEmail;
+      _acceptIncomingSessions = true;
     });
   }
 
@@ -200,6 +223,7 @@ class AuthController extends ChangeNotifier {
       }
       user = response.user;
       _expectedEmail = signedInEmail;
+      _acceptIncomingSessions = true;
     });
   }
 
@@ -208,6 +232,8 @@ class AuthController extends ChangeNotifier {
     required String code,
   }) async {
     await _run(() async {
+      await _clearLocalSession();
+      _acceptIncomingSessions = true;
       await _client!.auth.verifyOTP(
         email: email.trim(),
         token: code.trim(),
@@ -251,6 +277,7 @@ class AuthController extends ChangeNotifier {
       }
 
       await _clearLocalSession();
+      _acceptIncomingSessions = true;
       final response = await _client!.functions.invoke(
         'telegram-auth',
         body: {
@@ -270,6 +297,7 @@ class AuthController extends ChangeNotifier {
       }
       await _client!.auth.setSession(refreshToken, accessToken: accessToken);
       _expectedEmail = null;
+      _acceptIncomingSessions = true;
       _phoneRequestId = null;
       _phoneForRequest = null;
     });
@@ -291,14 +319,48 @@ class AuthController extends ChangeNotifier {
 
   Future<void> _clearLocalSession() async {
     _expectedEmail = null;
+    _acceptIncomingSessions = false;
     _ignoringAuthEvents = true;
     user = null;
     notifyListeners();
     try {
-      await _client!.auth.signOut(scope: SignOutScope.local);
+      try {
+        await _client!.auth.signOut(scope: SignOutScope.local);
+      } catch (_) {
+        // Local logout must still finish when the remote revocation request
+        // cannot reach Supabase (for example, from an installed PWA offline).
+      }
+      await _removePersistedSession();
+      await Future<void>.delayed(Duration.zero);
+      if (_client!.auth.currentSession != null) {
+        try {
+          await _client!.auth.signOut(scope: SignOutScope.local);
+        } catch (_) {}
+        await _removePersistedSession();
+      }
     } finally {
       _ignoringAuthEvents = false;
     }
+  }
+
+  Future<void> _discardUnexpectedSession() async {
+    if (_ignoringAuthEvents) return;
+    _ignoringAuthEvents = true;
+    try {
+      await _client!.auth.signOut(scope: SignOutScope.local);
+      await _removePersistedSession();
+      user = null;
+      _acceptIncomingSessions = false;
+      notifyListeners();
+    } finally {
+      _ignoringAuthEvents = false;
+    }
+  }
+
+  Future<void> _removePersistedSession() async {
+    final projectRef = Uri.parse(AppConfig.supabaseUrl).host.split('.').first;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('sb-$projectRef-auth-token');
   }
 
   @override
