@@ -71,6 +71,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 error: (_, _) => const _Header(name: 'мастер', initials: 'СМ'),
               ),
               const SizedBox(height: 14),
+              projects.when(
+                data: (items) => _ProjectSummaryCard(
+                  projects: items,
+                  onTap: () => context.go('/estimates?tab=projects'),
+                ),
+                loading: () => const _ProjectSummaryCard.loading(),
+                error: (_, _) => const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 12),
               estimates.when(
                 data: (items) {
                   final active = items
@@ -126,26 +135,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 error: (error, _) => ErrorPane(error: error),
               ),
               const SizedBox(height: 14),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: SizedBox(
-                  width: isDesktop ? 220 : double.infinity,
-                  child: FilledButton.icon(
+              LayoutBuilder(
+                builder: (context, actionConstraints) {
+                  final compact = actionConstraints.maxWidth < 520;
+                  final newEstimate = FilledButton.icon(
                     onPressed: () => context.push('/estimate/new'),
                     icon: const Icon(Icons.add),
                     label: const Text('Новая смета'),
-                  ),
-                ),
+                  );
+                  final newClient = OutlinedButton.icon(
+                    onPressed: () => context.push('/clients/new'),
+                    icon: const Icon(Icons.person_add_alt_1_outlined),
+                    label: const Text('Клиент'),
+                  );
+
+                  if (compact) {
+                    return Row(
+                      children: [
+                        Expanded(flex: 3, child: newEstimate),
+                        const SizedBox(width: 10),
+                        Expanded(flex: 2, child: newClient),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      SizedBox(width: 220, child: newEstimate),
+                      const SizedBox(width: 10),
+                      SizedBox(width: 172, child: newClient),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 14),
-              _QuickActions(isDesktop: isDesktop),
-              const SizedBox(height: 12),
-              projects.when(
-                data: (items) => _ProjectSummaryCard(
-                  projects: items,
-                  onTap: () => context.go('/estimates?tab=projects'),
-                ),
-                loading: () => const _ProjectSummaryCard.loading(),
+              estimates.when(
+                data: (items) {
+                  final waiting = items
+                      .where(
+                        (estimate) =>
+                            EstimateStatus.normalize(estimate.status) ==
+                            EstimateStatus.sent,
+                      )
+                      .length;
+                  if (waiting == 0) return const SizedBox.shrink();
+                  return _AttentionCard(
+                    count: waiting,
+                    onTap: () => context.go('/estimates'),
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
                 error: (_, _) => const SizedBox.shrink(),
               ),
               const SizedBox(height: 18),
@@ -166,17 +205,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       )
                       .toList();
                   if (active.isEmpty) {
-                    return EmptyState(
-                      icon: Icons.assignment_turned_in_outlined,
-                      title: 'Нет работ в процессе',
-                      body:
-                          'Когда клиент примет смету, откройте её и нажмите «Начать работу».',
-                      action: FilledButton.icon(
-                        onPressed: () => context.push('/estimate/new'),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Создать смету'),
-                      ),
-                    );
+                    return const _QuietWorkEmptyState();
                   }
                   return Column(
                     children: [
@@ -222,56 +251,86 @@ class _ProjectSummaryCard extends StatelessWidget {
       0,
       (sum, project) => sum + project.expenseAmount,
     );
+    if (!loading && active.isEmpty) return const SizedBox.shrink();
     return SmetchikCard(
       onTap: onTap,
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: AppColors.orangeLight,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(
-              Icons.domain_outlined,
-              color: AppColors.orangeDark,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: loading
-                ? const Text(
-                    'Загружаем объекты...',
-                    style: TextStyle(color: AppColors.textSecondary),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Объекты',
-                        style: TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        active.isEmpty
-                            ? 'Добавьте стройку и ведите затраты по ней'
-                            : '${active.length} в работе · потрачено ${formatMoney(expenses)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+      child: loading
+          ? const Text(
+              'Загружаем объекты...',
+              style: TextStyle(color: AppColors.textSecondary),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Активные объекты',
+                        style: TextStyle(
                           color: AppColors.textSecondary,
-                          fontSize: 12,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ],
-                  ),
-          ),
-          const Icon(Icons.chevron_right, color: AppColors.textHint),
-        ],
-      ),
+                    ),
+                    Text(
+                      'Все объекты',
+                      style: TextStyle(
+                        color: AppColors.orangeDark,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: AppColors.orangeDark,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 28,
+                  runSpacing: 8,
+                  children: [
+                    _ProjectMetric(
+                      value: '${active.length}',
+                      label: 'в работе',
+                    ),
+                    _ProjectMetric(
+                      value: formatMoney(expenses),
+                      label: 'потрачено на объекты',
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
+}
+
+class _ProjectMetric extends StatelessWidget {
+  const _ProjectMetric({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        value,
+        style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w900),
+      ),
+      Text(
+        label,
+        style: const TextStyle(color: AppColors.textHint, fontSize: 11),
+      ),
+    ],
+  );
 }
 
 class _Header extends StatelessWidget {
@@ -376,97 +435,102 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.isDesktop});
+class _AttentionCard extends StatelessWidget {
+  const _AttentionCard({required this.count, required this.onTap});
 
-  final bool isDesktop;
-
-  @override
-  Widget build(BuildContext context) {
-    final actions = [
-      _QuickAction(
-        icon: Icons.construction_outlined,
-        title: 'Прайс-лист',
-        onTap: () => context.go('/catalog'),
-      ),
-      _QuickAction(
-        icon: Icons.person_add_alt_1,
-        title: 'Добавить клиента',
-        onTap: () => context.push('/clients/new'),
-      ),
-      _QuickAction(
-        icon: Icons.receipt_long_outlined,
-        title: 'Все сметы',
-        onTap: () => context.go('/estimates'),
-      ),
-      _QuickAction(
-        icon: Icons.contact_phone_outlined,
-        title: 'Клиенты',
-        onTap: () => context.go('/clients'),
-      ),
-    ];
-
-    if (isDesktop) {
-      return Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final action in actions)
-            SizedBox(width: 270, height: 68, child: action),
-        ],
-      );
-    }
-
-    return GridView.count(
-      shrinkWrap: true,
-      crossAxisCount: 2,
-      crossAxisSpacing: 8,
-      mainAxisSpacing: 8,
-      childAspectRatio: 2.25,
-      physics: const NeverScrollableScrollPhysics(),
-      children: actions,
-    );
-  }
-}
-
-class _QuickAction extends StatelessWidget {
-  const _QuickAction({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
+  final int count;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.orangeLight,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.mark_email_unread_outlined,
+                color: AppColors.orangeDark,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$count ${_estimateWord(count)} жд${count == 1 ? 'ёт' : 'ут'} ответа клиента',
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Открыть сметы',
+                      style: TextStyle(
+                        color: AppColors.orangeDark,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.orangeDark),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuietWorkEmptyState extends StatelessWidget {
+  const _QuietWorkEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
     return SmetchikCard(
-      onTap: onTap,
-      padding: const EdgeInsets.all(10),
       child: Row(
         children: [
           Container(
-            width: 34,
-            height: 34,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
-              color: AppColors.orangeLight,
-              borderRadius: BorderRadius.circular(10),
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: AppColors.orangeDark, size: 19),
+            child: const Icon(
+              Icons.hourglass_empty_rounded,
+              color: AppColors.textHint,
+              size: 20,
+            ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
+          const SizedBox(width: 11),
+          const Expanded(
             child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              'Нет работ в процессе. Создайте смету, когда появится новый объект.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
           ),
         ],
       ),
     );
   }
+}
+
+String _estimateWord(int count) {
+  final remainder = count % 100;
+  if (remainder >= 11 && remainder <= 14) return 'смет';
+  return switch (count % 10) {
+    1 => 'смета',
+    2 || 3 || 4 => 'сметы',
+    _ => 'смет',
+  };
 }
 
 class _EstimateCard extends StatelessWidget {

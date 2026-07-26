@@ -15,6 +15,20 @@ class SupportScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tickets = ref.watch(supportTicketsProvider);
     return Scaffold(
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Назад',
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/settings');
+            }
+          },
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
       body: tickets.when(
         loading: () => const LoadingPane(),
         error: (error, _) => ErrorPane(error: error),

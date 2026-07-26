@@ -270,7 +270,7 @@ class _ClientCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SmetchikCard(
-      onTap: () => context.push('/clients/${client.id}/edit'),
+      onTap: () => context.push('/clients/${client.id}'),
       child: Row(
         children: [
           CircleAvatar(

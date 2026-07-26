@@ -242,6 +242,26 @@ class SmetchikRepository {
     );
   }
 
+  Future<void> clearProfileSignature() async {
+    final current = await _client
+        .from('profiles')
+        .select('signature_path')
+        .eq('id', _userId)
+        .maybeSingle();
+    final previousPath = current?['signature_path'] as String?;
+
+    await _client
+        .from('profiles')
+        .update({'signature_path': null})
+        .eq('id', _userId);
+
+    if (previousPath != null &&
+        !previousPath.startsWith('http://') &&
+        !previousPath.startsWith('https://')) {
+      await _removeStorageObject('signatures', previousPath);
+    }
+  }
+
   Future<String> uploadProfileQr({
     required String kind,
     required Uint8List bytes,

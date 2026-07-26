@@ -53,8 +53,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Илья'), findsOneWidget);
-      expect(find.text('Тариф Базовый'), findsOneWidget);
-      expect(find.text('Профи истёк'), findsOneWidget);
+      expect(find.text('Тариф и бригада'), findsOneWidget);
+      expect(find.text('Базовый'), findsWidgets);
     }
 
     tester.view.resetPhysicalSize();
@@ -90,7 +90,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Базовый').first);
+    await tester.tap(find.text('Тариф и бригада'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Тарифы'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tariff-sheet-drag-handle')), findsOneWidget);
 

@@ -11,6 +11,7 @@ import 'data/offline_sync_service.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/catalog/catalog_screen.dart';
 import 'features/clients/client_form_screen.dart';
+import 'features/clients/client_detail_screen.dart';
 import 'features/clients/clients_screen.dart';
 import 'features/config/config_required_screen.dart';
 import 'features/estimates/client_approval_screen.dart';
@@ -171,6 +172,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _page(
           state,
           ClientFormScreen(clientId: state.pathParameters['id']),
+        ),
+      ),
+      GoRoute(
+        path: '/clients/:id',
+        pageBuilder: (context, state) => _page(
+          state,
+          ClientDetailScreen(clientId: state.pathParameters['id']!),
         ),
       ),
       GoRoute(

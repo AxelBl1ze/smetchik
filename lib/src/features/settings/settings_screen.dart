@@ -32,7 +32,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _pdfFooterNote = TextEditingController();
   final _paymentQrLabel = TextEditingController();
   final _contactQrLabel = TextEditingController();
-  final _nameFocus = FocusNode();
   String _pdfTemplate = PdfTemplate.brightAccent;
   String _pdfAccentColor = PdfAccentColor.orange;
   bool _pdfShowBrandHeader = true;
@@ -40,18 +39,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pdfShowServiceMark = true;
   bool _hydrated = false;
   bool _saving = false;
-  bool _editingName = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameFocus.addListener(() {
-      if (!_nameFocus.hasFocus && _editingName && mounted) {
-        setState(() => _editingName = false);
-      }
-    });
-  }
-
   @override
   void dispose() {
     _name.dispose();
@@ -61,7 +48,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _pdfFooterNote.dispose();
     _paymentQrLabel.dispose();
     _contactQrLabel.dispose();
-    _nameFocus.dispose();
     super.dispose();
   }
 
@@ -82,253 +68,102 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         data: (value) => ResponsiveListView(
           maxWidth: 720,
           children: [
-            SmetchikCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final compact = _isNarrowLayout(constraints, 430);
-                      final avatar = _AvatarButton(
-                        initials: value?.initials ?? 'СМ',
-                        imageUrl: ref
-                            .read(repositoryProvider)
-                            .logoPublicUrl(value?.logoPath),
-                        busy: _saving,
-                        onTap: _showAvatarSheet,
-                      );
-                      final name = _ProfileNameField(
-                        controller: _name,
-                        focusNode: _nameFocus,
-                        editing: _editingName,
-                        onEdit: _startNameEditing,
-                        onSubmitted: _finishNameEditing,
-                      );
-                      final tariff = _TariffBadge(
-                        plan:
-                            value?.effectiveSubscriptionPlan ??
-                            SubscriptionPlan.basic,
-                        onTap: () => _showTariffSheet(value),
-                      );
-
-                      if (compact) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                avatar,
-                                const SizedBox(width: 12),
-                                Expanded(child: name),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            tariff,
-                          ],
-                        );
-                      }
-
-                      return Row(
-                        children: [
-                          avatar,
-                          const SizedBox(width: 12),
-                          Expanded(child: name),
-                          const SizedBox(width: 10),
-                          tariff,
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            SmetchikCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const _CardTitle(
-                    icon: Icons.badge_outlined,
-                    title: 'Информация мастера',
-                    subtitle: 'Телефон и специализация',
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _phone,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: const [RussianPhoneInputFormatter()],
-                    decoration: const InputDecoration(
-                      labelText: 'Телефон',
-                      prefixIcon: Icon(Icons.phone_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SpecializationField(controller: _spec),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            SmetchikCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const _CardTitle(
-                    icon: Icons.workspace_premium_outlined,
-                    title: 'Тариф и бригада',
-                    subtitle: 'Подписка, промокод и мастера в одной карточке',
-                  ),
-                  const SizedBox(height: 14),
-                  estimates.when(
-                    data: (items) => _SubscriptionCard(
-                      profile: value,
-                      estimates: items,
-                      busy: _saving,
-                      framed: false,
-                      onTap: () => _showTariffSheet(value),
-                      onRedeem: _showPromoCodeSheet,
-                    ),
-                    loading: () => _SubscriptionCard(
-                      profile: value,
-                      estimates: const [],
-                      busy: true,
-                      framed: false,
-                      onTap: () => _showTariffSheet(value),
-                      onRedeem: _showPromoCodeSheet,
-                    ),
-                    error: (_, _) => _SubscriptionCard(
-                      profile: value,
-                      estimates: const [],
-                      busy: _saving,
-                      framed: false,
-                      onTap: () => _showTariffSheet(value),
-                      onRedeem: _showPromoCodeSheet,
-                    ),
-                  ),
-                  _TeamSubscriptionCard(
-                    profile: value,
-                    workspace: ref.watch(teamWorkspaceProvider),
-                    members: ref.watch(teamMembersProvider),
-                    invites: ref.watch(teamInvitesProvider),
-                    busy: _saving,
-                    framed: false,
-                    onOpenPlans: () => _showTariffSheet(value),
-                    onCreate: _createTeam,
-                    onInvite: _inviteTeamMember,
-                    onRemove: _removeTeamMember,
-                    onCancelInvite: _cancelTeamInvite,
-                  ),
-                  _IncomingTeamInvitesCard(
-                    invites: ref.watch(incomingTeamInvitesProvider),
-                    busy: _saving,
-                    framed: false,
-                    onAccept: _acceptTeamInvite,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            _SignatureSettingsCard(
-              signatureUrl:
-                  value?.signatureUrl ??
-                  ref
-                      .read(repositoryProvider)
-                      .signaturePublicUrl(value?.signaturePath),
-              busy: _saving,
-              onTap: _showSignatureSheet,
-            ),
-            const SizedBox(height: 14),
-            _QrSettingsCard(
-              paymentQrUrl:
-                  value?.paymentQrUrl ??
-                  ref
-                      .read(repositoryProvider)
-                      .qrPublicUrl(value?.paymentQrPath),
-              contactQrUrl:
-                  value?.contactQrUrl ??
-                  ref
-                      .read(repositoryProvider)
-                      .qrPublicUrl(value?.contactQrPath),
-              paymentLabel: _paymentQrLabel,
-              contactLabel: _contactQrLabel,
-              busy: _saving,
-              onPickPayment: () => _pickProfileQr(_ProfileQrKind.payment),
-              onPickContact: () => _pickProfileQr(_ProfileQrKind.contact),
-            ),
-            const SizedBox(height: 14),
-            estimates.when(
-              data: (items) =>
-                  SmetchikCard(child: _ProfileStats(estimates: items)),
-              loading: () => const SmetchikCard(child: _ProfileStatsSkeleton()),
-              error: (_, _) => const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 14),
-            estimates.when(
-              data: (items) => _AdvancedStatsLauncherCard(
-                profile: value,
-                estimates: items,
-                onOpen: () => _showAdvancedStatsSheet(value, items),
-                onUpgrade: () => _showTariffSheet(value),
-              ),
-              loading: () => const _AdvancedStatsSkeleton(),
-              error: (_, _) => const SizedBox.shrink(),
-            ),
-            const SizedBox(height: 14),
-            _PdfSettingsLauncherCard(
-              profile: value,
-              template: _pdfTemplate,
-              accentColor: _pdfAccentColor,
-              onOpen: () => _showPdfSettingsSheet(value),
-              onUpgrade: () => _showTariffSheet(value),
+            _SettingsProfileHeader(
+              name: value?.fullName.trim().isNotEmpty == true
+                  ? value!.fullName
+                  : 'Мастер',
+              initials: value?.initials ?? 'СМ',
+              imageUrl: ref
+                  .read(repositoryProvider)
+                  .logoPublicUrl(value?.logoPath),
+              plan: value?.effectiveSubscriptionPlan ?? SubscriptionPlan.basic,
+              onTap: () => _showMasterInfoSheet(value),
             ),
             const SizedBox(height: 18),
-            _SupportLauncherCard(onTap: () => context.push('/support')),
+            _SettingsMenuSection(
+              title: 'Работа',
+              children: [
+                _SettingsMenuTile(
+                  icon: Icons.workspace_premium_outlined,
+                  title: 'Тариф и бригада',
+                  value: _subscriptionMenuLabel(value),
+                  onTap: () => _showTariffAndTeamSheet(value),
+                ),
+              ],
+            ),
             const SizedBox(height: 14),
-            _LegalDocumentsCard(onTap: () => context.push('/legal')),
+            _SettingsMenuSection(
+              title: 'Документы и оплата',
+              children: [
+                _SettingsMenuTile(
+                  icon: Icons.picture_as_pdf_outlined,
+                  title: 'Оформление PDF',
+                  value: PdfTemplate.label(_pdfTemplate),
+                  onTap: () => _showPdfSettingsSheet(value),
+                ),
+                _SettingsMenuTile(
+                  icon: Icons.draw_outlined,
+                  title: 'Подпись мастера',
+                  value:
+                      value?.signaturePath == null &&
+                          value?.signatureUrl == null
+                      ? 'Не добавлена'
+                      : 'Добавлена',
+                  onTap: () => _showSignatureSheet(value),
+                ),
+                _SettingsMenuTile(
+                  icon: Icons.qr_code_2_outlined,
+                  title: 'QR оплаты и связи',
+                  value: _qrSummary(value),
+                  onTap: () => _showQrSettingsSheet(value),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _SettingsMenuSection(
+              title: 'Аналитика',
+              children: [
+                _SettingsMenuTile(
+                  icon: Icons.bar_chart_rounded,
+                  title: 'Статистика',
+                  value: estimates.when(
+                    data: (items) =>
+                        '${items.length} ${_estimateLabel(items.length)}',
+                    loading: () => 'Загружаем…',
+                    error: (_, _) => 'Недоступна',
+                  ),
+                  onTap: () {
+                    final items = estimates.asData?.value;
+                    if (items != null) _showAdvancedStatsSheet(value, items);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            _SettingsMenuSection(
+              title: 'Прочее',
+              children: [
+                _SettingsMenuTile(
+                  icon: Icons.headset_mic_outlined,
+                  title: 'Помощь и поддержка',
+                  onTap: () => context.push('/support'),
+                ),
+                _SettingsMenuTile(
+                  icon: Icons.gavel_outlined,
+                  title: 'Правовая информация',
+                  onTap: () => context.push('/legal'),
+                ),
+              ],
+            ),
             const SizedBox(height: 18),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final stacked =
-                    !constraints.maxWidth.isFinite ||
-                    constraints.maxWidth < 560;
-                final saveButton = FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.save),
-                  label: const Text('Сохранить'),
-                );
-                final logoutButton = OutlinedButton.icon(
-                  onPressed: () => ref.read(authControllerProvider).signOut(),
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Выйти'),
-                );
-
-                if (stacked) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      saveButton,
-                      const SizedBox(height: 10),
-                      logoutButton,
-                    ],
-                  );
-                }
-
-                return Row(
-                  children: [
-                    Expanded(child: saveButton),
-                    const SizedBox(width: 10),
-                    Expanded(child: logoutButton),
-                  ],
-                );
-              },
+            OutlinedButton.icon(
+              onPressed: () => ref.read(authControllerProvider).signOut(),
+              icon: const Icon(Icons.logout),
+              label: const Text('Выйти'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                side: const BorderSide(color: AppColors.danger),
+              ),
             ),
             const SizedBox(height: 18),
           ],
@@ -383,7 +218,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _showSignatureSheet() async {
+  Future<void> _showSignatureSheet(ProfileModel? profile) async {
+    if (_saving) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _SettingsFeatureSheet(
+        maxWidth: 620,
+        onClose: () => Navigator.of(sheetContext).pop(),
+        child: _SignatureSettingsCard(
+          signatureUrl:
+              profile?.signatureUrl ??
+              ref
+                  .read(repositoryProvider)
+                  .signaturePublicUrl(profile?.signaturePath),
+          busy: _saving,
+          onTap: () {
+            Navigator.of(sheetContext).pop();
+            _captureSignature();
+          },
+          onClear:
+              profile?.signaturePath == null && profile?.signatureUrl == null
+              ? null
+              : () {
+                  Navigator.of(sheetContext).pop();
+                  _clearSignature();
+                },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _captureSignature() async {
     if (_saving) return;
     final bytes = await showModalBottomSheet<Uint8List>(
       context: context,
@@ -404,6 +272,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Роспись сохранена')));
+    } catch (error) {
+      if (!mounted) return;
+      showAppErrorSnackBar(context, error);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _clearSignature() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(repositoryProvider).clearProfileSignature();
+      ref.invalidate(profileProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Роспись удалена')));
     } catch (error) {
       if (!mounted) return;
       showAppErrorSnackBar(context, error);
@@ -527,25 +413,198 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
+  Future<void> _showMasterInfoSheet(ProfileModel? profile) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _SettingsFeatureSheet(
+        maxWidth: 560,
+        onClose: () => Navigator.of(sheetContext).pop(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _CardTitle(
+              icon: Icons.badge_outlined,
+              title: 'Информация мастера',
+              subtitle: 'Данные для смет и связи с клиентами',
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _showAvatarSheet,
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text('Изменить аватар'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _name,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Имя мастера',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              inputFormatters: const [RussianPhoneInputFormatter()],
+              decoration: const InputDecoration(
+                labelText: 'Телефон',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SpecializationField(controller: _spec),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      await _save();
+                      if (sheetContext.mounted) {
+                        Navigator.of(sheetContext).pop();
+                      }
+                    },
+              icon: _saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showTariffAndTeamSheet(ProfileModel? profile) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _SettingsFeatureSheet(
+        maxWidth: 720,
+        onClose: () => Navigator.of(sheetContext).pop(),
+        child: Consumer(
+          builder: (context, ref, _) {
+            final estimates = ref.watch(estimatesProvider);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const _CardTitle(
+                  icon: Icons.workspace_premium_outlined,
+                  title: 'Тариф и бригада',
+                  subtitle: 'Подписка, промокод и доступ мастеров',
+                ),
+                const SizedBox(height: 16),
+                estimates.when(
+                  data: (items) => _SubscriptionCard(
+                    profile: profile,
+                    estimates: items,
+                    busy: _saving,
+                    framed: true,
+                    onTap: () => _showTariffSheet(profile),
+                    onRedeem: _showPromoCodeSheet,
+                  ),
+                  loading: () => _SubscriptionCard(
+                    profile: profile,
+                    estimates: const [],
+                    busy: true,
+                    framed: true,
+                    onTap: () => _showTariffSheet(profile),
+                    onRedeem: _showPromoCodeSheet,
+                  ),
+                  error: (_, _) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 12),
+                _TeamSubscriptionCard(
+                  profile: profile,
+                  workspace: ref.watch(teamWorkspaceProvider),
+                  members: ref.watch(teamMembersProvider),
+                  invites: ref.watch(teamInvitesProvider),
+                  busy: _saving,
+                  framed: true,
+                  onOpenPlans: () => _showTariffSheet(profile),
+                  onCreate: _createTeam,
+                  onInvite: _inviteTeamMember,
+                  onRemove: _removeTeamMember,
+                  onCancelInvite: _cancelTeamInvite,
+                ),
+                _IncomingTeamInvitesCard(
+                  invites: ref.watch(incomingTeamInvitesProvider),
+                  busy: _saving,
+                  framed: true,
+                  onAccept: _acceptTeamInvite,
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showQrSettingsSheet(ProfileModel? profile) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _SettingsFeatureSheet(
+        maxWidth: 620,
+        onClose: () => Navigator.of(sheetContext).pop(),
+        child: _QrSettingsCard(
+          paymentQrUrl:
+              profile?.paymentQrUrl ??
+              ref.read(repositoryProvider).qrPublicUrl(profile?.paymentQrPath),
+          contactQrUrl:
+              profile?.contactQrUrl ??
+              ref.read(repositoryProvider).qrPublicUrl(profile?.contactQrPath),
+          paymentLabel: _paymentQrLabel,
+          contactLabel: _contactQrLabel,
+          busy: _saving,
+          onPickPayment: () => _pickProfileQr(_ProfileQrKind.payment),
+          onPickContact: () => _pickProfileQr(_ProfileQrKind.contact),
+        ),
+      ),
+    );
+  }
+
+  String _subscriptionMenuLabel(ProfileModel? profile) {
+    if (profile == null) return 'Загружаем';
+    final plan = profile.effectiveSubscriptionPlan;
+    if (profile.subscriptionRenewsAt != null &&
+        plan != SubscriptionPlan.basic) {
+      return '${SubscriptionPlan.label(plan)} · до ${formatDate(profile.subscriptionRenewsAt!)}';
+    }
+    return SubscriptionPlan.label(plan);
+  }
+
+  String _qrSummary(ProfileModel? profile) {
+    final hasPayment =
+        profile?.paymentQrPath != null || profile?.paymentQrUrl != null;
+    final hasContact =
+        profile?.contactQrPath != null || profile?.contactQrUrl != null;
+    if (hasPayment && hasContact) return 'Оплата и связь';
+    if (hasPayment) return 'Только оплата';
+    if (hasContact) return 'Только связь';
+    return 'Не добавлены';
+  }
+
   String _guessImageMimeType(String name) {
     final lower = name.toLowerCase();
     if (lower.endsWith('.png')) return 'image/png';
     if (lower.endsWith('.webp')) return 'image/webp';
     return 'image/jpeg';
-  }
-
-  void _startNameEditing() {
-    setState(() => _editingName = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _nameFocus.requestFocus();
-      _name.selection = TextSelection.collapsed(offset: _name.text.length);
-    });
-  }
-
-  void _finishNameEditing() {
-    if (!_editingName) return;
-    setState(() => _editingName = false);
   }
 
   Future<void> _showTariffSheet(ProfileModel? profile) async {
@@ -836,6 +895,171 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 }
 
+class _SettingsProfileHeader extends StatelessWidget {
+  const _SettingsProfileHeader({
+    required this.name,
+    required this.initials,
+    required this.imageUrl,
+    required this.plan,
+    required this.onTap,
+  });
+
+  final String name;
+  final String initials;
+  final String? imageUrl;
+  final String plan;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SmetchikCard(
+      onTap: onTap,
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 27,
+            backgroundColor: AppColors.orangeLight,
+            foregroundColor: AppColors.orangeDark,
+            backgroundImage: imageUrl == null ? null : NetworkImage(imageUrl!),
+            child: imageUrl == null
+                ? Text(
+                    initials,
+                    style: const TextStyle(fontWeight: FontWeight.w900),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _TariffBadge(plan: plan, onTap: onTap),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right, color: AppColors.textHint),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsMenuSection extends StatelessWidget {
+  const _SettingsMenuSection({required this.title, required this.children});
+
+  final String title;
+  final List<_SettingsMenuTile> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 7),
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: AppColors.textHint,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        SmetchikCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              for (var index = 0; index < children.length; index++) ...[
+                children[index],
+                if (index < children.length - 1)
+                  const Divider(height: 1, color: AppColors.border),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettingsMenuTile extends StatelessWidget {
+  const _SettingsMenuTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+    this.value,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: AppColors.textSecondary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              if (value?.isNotEmpty == true)
+                Flexible(
+                  child: Text(
+                    value!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(
+                      color: AppColors.textHint,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: AppColors.textHint,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _estimateLabel(int count) {
+  final remainder = count % 100;
+  if (remainder >= 11 && remainder <= 14) return 'смет';
+  return switch (count % 10) {
+    1 => 'смета',
+    2 || 3 || 4 => 'сметы',
+    _ => 'смет',
+  };
+}
+
+// ignore: unused_element
 class _ProfileNameField extends StatelessWidget {
   const _ProfileNameField({
     required this.controller,
@@ -900,6 +1124,7 @@ class _ProfileNameField extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _AvatarButton extends StatelessWidget {
   const _AvatarButton({
     required this.initials,
@@ -962,7 +1187,7 @@ class _AvatarPickerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      top: false,
+      top: true,
       child: Align(
         alignment: Alignment.bottomCenter,
         heightFactor: 1,
@@ -1023,6 +1248,7 @@ class _AvatarPickerSheet extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _LegalDocumentsCard extends StatelessWidget {
   const _LegalDocumentsCard({required this.onTap});
 
@@ -1079,6 +1305,7 @@ class _LegalDocumentsCard extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _SupportLauncherCard extends StatelessWidget {
   const _SupportLauncherCard({required this.onTap});
 
@@ -1146,11 +1373,13 @@ class _SignatureSettingsCard extends StatelessWidget {
     required this.signatureUrl,
     required this.busy,
     required this.onTap,
+    this.onClear,
   });
 
   final String? signatureUrl;
   final bool busy;
   final VoidCallback onTap;
+  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -1207,6 +1436,15 @@ class _SignatureSettingsCard extends StatelessWidget {
             icon: Icon(hasSignature ? Icons.edit_outlined : Icons.gesture),
             label: Text(hasSignature ? 'Перерисовать' : 'Добавить роспись'),
           ),
+          if (hasSignature && onClear != null) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: busy ? null : onClear,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Удалить роспись'),
+              style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            ),
+          ],
         ],
       ),
     );
@@ -1436,7 +1674,7 @@ class _SignaturePadSheetState extends State<_SignaturePadSheet> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      top: false,
+      top: true,
       child: Align(
         alignment: Alignment.bottomCenter,
         heightFactor: 1,
@@ -1554,8 +1792,10 @@ class _SignaturePadSheetState extends State<_SignaturePadSheet> {
 
   void _appendPoint(Offset point) {
     if (_strokes.isEmpty) return;
-    _strokes.last.add(point);
-    _signatureRevision.value++;
+    setState(() {
+      _strokes.last.add(point);
+      _signatureRevision.value++;
+    });
   }
 
   void _clear() {
@@ -1632,11 +1872,20 @@ class _SettingsFeatureSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final media = MediaQuery.of(context);
+    final keyboard = media.viewInsets.bottom;
+    // A regular SafeArea only starts below the status bar. Keep a deliberate
+    // extra clearance for the Dynamic Island and the sheet close button.
+    final topClearance = media.padding.top + 24;
+    final availableHeight =
+        media.size.height - topClearance - media.padding.bottom - keyboard - 20;
+    final maxSheetHeight = availableHeight < media.size.height * 0.86
+        ? availableHeight
+        : media.size.height * 0.86;
     return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
+      padding: EdgeInsets.only(bottom: keyboard),
       child: SafeArea(
-        top: false,
+        top: true,
         child: Align(
           alignment: Alignment.bottomCenter,
           heightFactor: 1,
@@ -1644,9 +1893,7 @@ class _SettingsFeatureSheet extends StatelessWidget {
             constraints: BoxConstraints(maxWidth: maxWidth),
             child: Container(
               margin: const EdgeInsets.all(10),
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.sizeOf(context).height * 0.92,
-              ),
+              constraints: BoxConstraints(maxHeight: maxSheetHeight),
               decoration: BoxDecoration(
                 color: AppColors.background,
                 borderRadius: BorderRadius.circular(26),
@@ -1766,6 +2013,7 @@ class _AdvancedStatsCard extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _AdvancedStatsSkeleton extends StatelessWidget {
   const _AdvancedStatsSkeleton();
 
@@ -1781,6 +2029,7 @@ class _AdvancedStatsSkeleton extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _AdvancedStatsLauncherCard extends StatelessWidget {
   const _AdvancedStatsLauncherCard({
     required this.profile,
@@ -2537,6 +2786,7 @@ class _AnalyticsTile extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _PdfSettingsLauncherCard extends StatelessWidget {
   const _PdfSettingsLauncherCard({
     required this.profile,
@@ -4016,7 +4266,7 @@ class _PromoCodeSheetState extends State<_PromoCodeSheet> {
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, bottom + 16),
       child: SafeArea(
-        top: false,
+        top: true,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 460),
@@ -4355,7 +4605,7 @@ class _TariffSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final sheetHeight = MediaQuery.sizeOf(context).height * 0.78;
     return SafeArea(
-      top: false,
+      top: true,
       child: Align(
         alignment: Alignment.bottomCenter,
         child: ConstrainedBox(
@@ -4522,7 +4772,7 @@ class _MockCheckoutSheet extends StatelessWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: SafeArea(
-          top: false,
+          top: true,
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
             child: Column(
@@ -5087,7 +5337,7 @@ class _TeamInviteSheet extends StatelessWidget {
   final VoidCallback onConfirm;
   @override
   Widget build(BuildContext context) => SafeArea(
-    top: false,
+    top: true,
     child: AnimatedPadding(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOutCubic,
@@ -5256,6 +5506,7 @@ int _createdThisMonth(List<EstimateModel> estimates) {
       .length;
 }
 
+// ignore: unused_element
 class _ProfileStats extends StatelessWidget {
   const _ProfileStats({required this.estimates});
 
@@ -5317,6 +5568,7 @@ class _ProfileStats extends StatelessWidget {
   }
 }
 
+// ignore: unused_element
 class _ProfileStatsSkeleton extends StatelessWidget {
   const _ProfileStatsSkeleton();
 

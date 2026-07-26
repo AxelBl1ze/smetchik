@@ -139,11 +139,12 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
                                 ),
                               );
                             }
+                            final groups = _groupByObject(filtered);
                             return Column(
                               children: [
-                                for (final estimate in filtered) ...[
-                                  _EstimateListCard(estimate: estimate),
-                                  const SizedBox(height: 8),
+                                for (final group in groups) ...[
+                                  _EstimateObjectGroup(group: group),
+                                  const SizedBox(height: 10),
                                 ],
                               ],
                             );
@@ -162,6 +163,48 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
 
   void _setQuery(String value) {
     setState(() => _query = value.trim().toLowerCase());
+  }
+}
+
+List<_EstimateObjectGroupData> _groupByObject(List<EstimateModel> estimates) {
+  final groups = <String, List<EstimateModel>>{};
+  for (final estimate in estimates) {
+    final title = estimate.objectTitle.trim();
+    final key = title.isEmpty ? 'Без названия объекта' : title.toLowerCase();
+    groups.putIfAbsent(key, () => []).add(estimate);
+  }
+  return groups.values
+      .map(
+        (items) => _EstimateObjectGroupData(
+          title: items.first.objectTitle.trim().isEmpty
+              ? 'Без названия объекта'
+              : items.first.objectTitle.trim(),
+          estimates: items,
+        ),
+      )
+      .toList();
+}
+
+class _EstimateObjectGroupData {
+  const _EstimateObjectGroupData({
+    required this.title,
+    required this.estimates,
+  });
+
+  final String title;
+  final List<EstimateModel> estimates;
+
+  double get total =>
+      estimates.fold<double>(0, (sum, estimate) => sum + estimate.totalAmount);
+
+  String get clientName {
+    final names = estimates
+        .map((estimate) => estimate.client?.name.trim() ?? '')
+        .where((name) => name.isNotEmpty)
+        .toSet();
+    if (names.isEmpty) return 'Клиент не указан';
+    if (names.length == 1) return names.first;
+    return '${names.length} клиента';
   }
 }
 
@@ -376,78 +419,166 @@ class _EstimatesSearchField extends StatelessWidget {
   }
 }
 
-class _EstimateListCard extends StatelessWidget {
-  const _EstimateListCard({required this.estimate});
+class _EstimateObjectGroup extends StatelessWidget {
+  const _EstimateObjectGroup({required this.group});
+
+  final _EstimateObjectGroupData group;
+
+  @override
+  Widget build(BuildContext context) {
+    return SmetchikCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        group.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '${group.clientName} · ${group.estimates.length} ${_estimateWord(group.estimates.length)}',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  formatMoney(group.total),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          for (final estimate in group.estimates)
+            _GroupedEstimateRow(estimate: estimate),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupedEstimateRow extends StatelessWidget {
+  const _GroupedEstimateRow({required this.estimate});
 
   final EstimateModel estimate;
 
   @override
   Widget build(BuildContext context) {
-    return SmetchikCard(
-      onTap: () => context.push('/estimate/${estimate.id}'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  estimate.objectTitle,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 15,
+    final documentCode = estimate.id
+        .replaceAll('-', '')
+        .substring(0, 6)
+        .toUpperCase();
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push('/estimate/${estimate.id}'),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: AppColors.border)),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 440;
+              final title = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Смета #$documentCode',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
+                  const SizedBox(height: 2),
+                  Text(
+                    formatDate(estimate.estimateDate),
+                    style: const TextStyle(
+                      color: AppColors.textHint,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              );
+              final amount = Text(
                 formatMoney(estimate.totalAmount),
                 style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(
-                Icons.person_outline,
-                size: 15,
-                color: AppColors.textHint,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  estimate.client?.name ?? 'Клиент не указан',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
+              );
+              if (compact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    title,
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        amount,
+                        const Spacer(),
+                        StatusBadge(status: estimate.status),
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.textHint,
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: 10),
+                  amount,
+                  const SizedBox(width: 8),
+                  StatusBadge(status: estimate.status),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Редактировать смету',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () =>
+                        context.push('/estimate/${estimate.id}/edit'),
+                    icon: const Icon(Icons.edit_outlined, size: 18),
                   ),
-                ),
-              ),
-              Text(
-                formatDate(estimate.estimateDate),
-                style: const TextStyle(color: AppColors.textHint, fontSize: 12),
-              ),
-            ],
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              StatusBadge(status: estimate.status),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () => context.push('/estimate/${estimate.id}/edit'),
-                icon: const Icon(Icons.edit, size: 16),
-                label: const Text('Править'),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
+}
+
+String _estimateWord(int count) {
+  final remainder = count % 100;
+  if (remainder >= 11 && remainder <= 14) return 'смет';
+  return switch (count % 10) {
+    1 => 'смета',
+    2 || 3 || 4 => 'сметы',
+    _ => 'смет',
+  };
 }

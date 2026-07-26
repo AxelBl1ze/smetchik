@@ -136,7 +136,11 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
           );
       ref.invalidate(clientsProvider);
       if (!mounted) return;
-      context.go('/clients');
+      if (widget.clientId != null) {
+        context.go('/clients/${widget.clientId}');
+      } else {
+        context.go('/clients');
+      }
     } catch (error) {
       if (!mounted) return;
       if (error.toString().contains('Лимит базового тарифа')) {
