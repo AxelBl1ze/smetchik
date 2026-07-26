@@ -101,7 +101,7 @@ async function dashboard(context: AdminContext): Promise<JsonRecord> {
   const proResult = await context.admin
     .from('profiles')
     .select('subscription_status,subscription_renews_at')
-    .eq('subscription_plan', 'pro')
+    .in('subscription_plan', ['pro', 'team'])
     .limit(5000);
   if (proResult.error) throw proResult.error;
 
@@ -152,6 +152,25 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
     : { data: [], error: null };
   if (profiles.error) throw profiles.error;
   const byId = new Map((profiles.data ?? []).map((profile) => [profile.id, profile]));
+  const memberships = ids.length
+    ? await context.admin
+      .from('team_members')
+      .select('user_id,team_id,role')
+      .in('user_id', ids)
+    : { data: [], error: null };
+  if (memberships.error) throw memberships.error;
+  const teamIds = [...new Set((memberships.data ?? []).map((member) => member.team_id))];
+  const teams = teamIds.length
+    ? await context.admin
+      .from('teams')
+      .select('id,name,owner_user_id')
+      .in('id', teamIds)
+    : { data: [], error: null };
+  if (teams.error) throw teams.error;
+  const teamById = new Map((teams.data ?? []).map((team) => [team.id, team]));
+  const membershipByUserId = new Map(
+    (memberships.data ?? []).map((member) => [member.user_id, member]),
+  );
   const adminRoles = ids.length
     ? await context.admin
       .from('app_admins')
@@ -165,6 +184,9 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
   const rows = authUsers
     .map((user) => {
       const profile = byId.get(user.id) ?? {};
+      const membership = membershipByUserId.get(user.id);
+      const team = membership ? teamById.get(membership.team_id) : null;
+      const teamManaged = profile.subscription_plan === 'team' || Boolean(membership);
       return {
         id: user.id,
         email: user.email ?? null,
@@ -172,10 +194,19 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
         fullName: profile.full_name ?? '',
         phone: profile.phone ?? null,
         specialization: profile.specialization ?? null,
-        subscriptionPlan: profile.subscription_plan ?? 'basic',
+        subscriptionPlan: teamManaged ? 'team' : profile.subscription_plan ?? 'basic',
         subscriptionStatus: profile.subscription_status ?? 'active',
         subscriptionSource: profile.subscription_source ?? 'manual',
         subscriptionRenewsAt: profile.subscription_renews_at ?? null,
+        teamManaged,
+        team: membership
+          ? {
+            id: membership.team_id,
+            name: team?.name ?? 'Бригада',
+            role: membership.role,
+            ownerUserId: team?.owner_user_id ?? null,
+          }
+          : null,
         bannedUntil: user.banned_until ?? null,
         adminRole: roleById.get(user.id) ?? null,
       };
@@ -287,11 +318,12 @@ async function grantSubscription(
   const days = boundedInt(body.days, 30, 1, 1095);
   const profile = await context.admin
     .from('profiles')
-    .select('id,subscription_renews_at')
+    .select('id,subscription_plan,subscription_renews_at')
     .eq('id', userId)
     .maybeSingle();
   if (profile.error) throw profile.error;
   if (!profile.data) throw new HttpError('Профиль пользователя не найден.', 404);
+  await requireIndependentSubscription(context, userId, profile.data.subscription_plan);
 
   const current = profile.data.subscription_renews_at
     ? Date.parse(profile.data.subscription_renews_at)
@@ -321,6 +353,14 @@ async function revokeSubscription(
 ): Promise<JsonRecord> {
   requireSupport(context);
   const userId = requiredUuid(body.userId, 'пользователя');
+  const profile = await context.admin
+    .from('profiles')
+    .select('id,subscription_plan')
+    .eq('id', userId)
+    .maybeSingle();
+  if (profile.error) throw profile.error;
+  if (!profile.data) throw new HttpError('Профиль пользователя не найден.', 404);
+  await requireIndependentSubscription(context, userId, profile.data.subscription_plan);
   const update = await context.admin
     .from('profiles')
     .update({
@@ -339,6 +379,30 @@ async function revokeSubscription(
     plan: 'basic',
   });
   return { userId, plan: 'basic', renewsAt: null };
+}
+
+async function requireIndependentSubscription(
+  context: AdminContext,
+  userId: string,
+  subscriptionPlan: unknown,
+) {
+  const membership = await context.admin
+    .from('team_members')
+    .select('team_id,role')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (membership.error) throw membership.error;
+  if (subscriptionPlan === 'team' || membership.data) {
+    const subject = membership.data
+      ? membership.data.role === 'owner'
+        ? 'владельца команды'
+        : 'участника команды'
+      : 'этого пользователя';
+    throw new HttpError(
+      `Тариф Бригада управляется через владельца бригады. Нельзя отдельно менять тариф ${subject}.`,
+      409,
+    );
+  }
 }
 
 async function setUserBlock(

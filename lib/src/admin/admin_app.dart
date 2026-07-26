@@ -832,7 +832,7 @@ class _DashboardView extends StatelessWidget {
                 AppColors.success,
               ),
               _MetricData(
-                'Профи',
+                'Платные',
                 _number(metrics['activePro']),
                 Icons.workspace_premium_outlined,
                 const Color(0xFFF1EAFE),
@@ -1251,6 +1251,12 @@ class _AdminUserCard extends StatelessWidget {
     final renewsAt = _date(user['subscriptionRenewsAt']);
     final pro =
         plan == 'pro' && (renewsAt == null || renewsAt.isAfter(DateTime.now()));
+    final team = _record(user['team']);
+    final teamManaged = user['teamManaged'] == true || plan == 'team';
+    final isTeamOwner = team['role']?.toString() == 'owner';
+    final teamActive =
+        teamManaged && (renewsAt == null || renewsAt.isAfter(DateTime.now()));
+    final paid = pro || teamActive;
     final bannedUntil = _date(user['bannedUntil']);
     final blocked = bannedUntil != null && bannedUntil.isAfter(DateTime.now());
     final adminRole = _fallback(user['adminRole'], '');
@@ -1270,13 +1276,13 @@ class _AdminUserCard extends StatelessWidget {
                 height: 42,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: pro ? AppColors.graphite : AppColors.orangeLight,
+                  color: paid ? AppColors.graphite : AppColors.orangeLight,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Text(
                   _initials(user['fullName']?.toString() ?? ''),
                   style: TextStyle(
-                    color: pro ? AppColors.orange : AppColors.orangeDark,
+                    color: paid ? AppColors.orange : AppColors.orangeDark,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
@@ -1308,7 +1314,7 @@ class _AdminUserCard extends StatelessWidget {
                           fontSize: 12,
                         ),
                       ),
-                    if (adminRole.isNotEmpty || blocked) ...[
+                    if (adminRole.isNotEmpty || blocked || teamManaged) ...[
                       const SizedBox(height: 4),
                       Wrap(
                         spacing: 6,
@@ -1328,6 +1334,15 @@ class _AdminUserCard extends StatelessWidget {
                               color: AppColors.danger,
                               background: AppColors.dangerBg,
                             ),
+                          if (teamManaged)
+                            _UserMiniPill(
+                              icon: Icons.groups_2_outlined,
+                              label: isTeamOwner
+                                  ? 'Владелец бригады'
+                                  : 'Участник бригады',
+                              color: AppColors.orangeDark,
+                              background: AppColors.orangeLight,
+                            ),
                         ],
                       ),
                     ],
@@ -1336,7 +1351,9 @@ class _AdminUserCard extends StatelessWidget {
               ),
             ],
           );
-          final action = pro
+          final action = teamManaged
+              ? null
+              : pro
               ? OutlinedButton.icon(
                   onPressed: onRevoke,
                   style: OutlinedButton.styleFrom(
@@ -1358,8 +1375,12 @@ class _AdminUserCard extends StatelessWidget {
                   label: const Text('Выдать Профи'),
                 );
           final status = _PlanPill(
-            pro: pro,
-            label: pro && renewsAt != null
+            premium: paid,
+            label: teamManaged
+                ? renewsAt != null
+                      ? 'Бригада до ${formatDate(renewsAt)}'
+                      : 'Бригада'
+                : pro && renewsAt != null
                 ? 'Профи до ${formatDate(renewsAt)}'
                 : pro
                 ? 'Профи'
@@ -1391,12 +1412,15 @@ class _AdminUserCard extends StatelessWidget {
                 const SizedBox(height: 12),
                 status,
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: action),
-                    if (menu != null) ...[const SizedBox(width: 8), menu],
-                  ],
-                ),
+                if (action != null)
+                  Row(
+                    children: [
+                      Expanded(child: action),
+                      if (menu != null) ...[const SizedBox(width: 8), menu],
+                    ],
+                  )
+                else if (menu != null)
+                  Align(alignment: Alignment.centerRight, child: menu),
               ],
             );
           }
@@ -1405,8 +1429,7 @@ class _AdminUserCard extends StatelessWidget {
               Expanded(child: info),
               const SizedBox(width: 12),
               status,
-              const SizedBox(width: 10),
-              action,
+              if (action != null) ...[const SizedBox(width: 10), action],
               if (menu != null) ...[const SizedBox(width: 4), menu],
             ],
           );
@@ -1697,9 +1720,9 @@ class _UserMiniPill extends StatelessWidget {
 }
 
 class _PlanPill extends StatelessWidget {
-  const _PlanPill({required this.pro, required this.label});
+  const _PlanPill({required this.premium, required this.label});
 
-  final bool pro;
+  final bool premium;
   final String label;
 
   @override
@@ -1707,14 +1730,16 @@ class _PlanPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: pro ? AppColors.graphite : AppColors.background,
+        color: premium ? AppColors.graphite : AppColors.background,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: pro ? AppColors.graphite : AppColors.border),
+        border: Border.all(
+          color: premium ? AppColors.graphite : AppColors.border,
+        ),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: pro ? Colors.white : AppColors.textSecondary,
+          color: premium ? Colors.white : AppColors.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w800,
         ),
