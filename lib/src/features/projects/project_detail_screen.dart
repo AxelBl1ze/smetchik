@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/app_error.dart';
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/pdf_service.dart';
@@ -383,7 +384,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       ref.invalidate(projectDetailProvider(project.id));
     } catch (error) {
       if (mounted) {
-        final message = error.toString().replaceFirst('Exception: ', '');
+        final message = appErrorMessage(error);
         if (message.contains('Базовом тарифе')) {
           showUpgradeSheet(
             context: context,
@@ -427,7 +428,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ).showSnackBar(SnackBar(content: Text(appErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -543,7 +544,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        ).showSnackBar(SnackBar(content: Text(appErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _busy = false);

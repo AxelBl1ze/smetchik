@@ -461,7 +461,7 @@ class _AdminWorkspaceState extends State<_AdminWorkspace> {
   }
 }
 
-enum _AdminSection { overview, users, promos, signatures, audit }
+enum _AdminSection { overview, users, support, promos, signatures, audit }
 
 class _AdminNavigation extends StatelessWidget {
   const _AdminNavigation({
@@ -490,6 +490,11 @@ class _AdminNavigation extends StatelessWidget {
         section: _AdminSection.users,
         icon: Icons.people_alt_outlined,
         label: 'Пользователи',
+      ),
+      (
+        section: _AdminSection.support,
+        icon: Icons.support_agent_rounded,
+        label: 'Поддержка',
       ),
       (
         section: _AdminSection.promos,
@@ -675,6 +680,7 @@ class _AdminContentState extends State<_AdminContent> {
           canManageAdmins: isOwner,
           currentAdminId: _fallback(operator['id'], ''),
         ),
+        _AdminSection.support => _SupportView(api: widget.api),
         _AdminSection.promos => _PromosView(api: widget.api),
         _AdminSection.signatures => _SignaturesView(api: widget.api),
         _AdminSection.audit => _AuditView(api: widget.api),
@@ -689,6 +695,7 @@ class _AdminContentState extends State<_AdminContent> {
     final title = switch (widget.section) {
       _AdminSection.overview => 'Обзор',
       _AdminSection.users => 'Пользователи',
+      _AdminSection.support => 'Поддержка',
       _AdminSection.promos => 'Промокоды',
       _AdminSection.signatures => 'Подписанные сметы',
       _AdminSection.audit => 'Журнал действий',
@@ -696,6 +703,7 @@ class _AdminContentState extends State<_AdminContent> {
     final subtitle = switch (widget.section) {
       _AdminSection.overview => 'Состояние сервиса и последние события',
       _AdminSection.users => 'Тарифы, блокировки и служебные доступы',
+      _AdminSection.support => 'Обращения мастеров и ответы команды',
       _AdminSection.promos => 'Выдача Профи без подключения оплаты',
       _AdminSection.signatures =>
         'Зафиксированные документы и пакет доказательств',
@@ -2376,6 +2384,601 @@ class _EvidenceRow extends StatelessWidget {
   }
 }
 
+class _SupportView extends StatefulWidget {
+  const _SupportView({required this.api});
+
+  final AdminApi api;
+
+  @override
+  State<_SupportView> createState() => _SupportViewState();
+}
+
+class _SupportViewState extends State<_SupportView> {
+  final _query = TextEditingController();
+  final _reply = TextEditingController();
+  List<Map<String, dynamic>> _tickets = [];
+  List<Map<String, dynamic>> _messages = [];
+  String _status = 'all';
+  String? _selectedId;
+  bool _loading = true;
+  bool _loadingMessages = false;
+  bool _sending = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTickets();
+  }
+
+  @override
+  void dispose() {
+    _query.dispose();
+    _reply.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadTickets() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final data = await widget.api.call(
+        'support_tickets',
+        body: {'query': _query.text.trim(), 'status': _status},
+      );
+      if (!mounted) return;
+      final tickets = _records(data['tickets']);
+      setState(() {
+        _tickets = tickets;
+        if (_selectedId != null &&
+            !tickets.any((item) => item['id'] == _selectedId)) {
+          _selectedId = null;
+          _messages = [];
+        }
+      });
+      if (_selectedId != null) await _loadMessages(_selectedId!);
+    } catch (error) {
+      if (mounted) setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMessages(String ticketId) async {
+    setState(() => _loadingMessages = true);
+    try {
+      final data = await widget.api.call(
+        'support_messages',
+        body: {'ticketId': ticketId},
+      );
+      if (mounted && _selectedId == ticketId) {
+        setState(() => _messages = _records(data['messages']));
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = _message(error));
+    } finally {
+      if (mounted) setState(() => _loadingMessages = false);
+    }
+  }
+
+  Future<void> _select(Map<String, dynamic> ticket) async {
+    final id = _fallback(ticket['id'], '');
+    if (id.isEmpty) return;
+    setState(() {
+      _selectedId = id;
+      _messages = [];
+      _reply.clear();
+    });
+    await _loadMessages(id);
+  }
+
+  Future<void> _sendReply() async {
+    final ticketId = _selectedId;
+    final body = _reply.text.trim();
+    if (ticketId == null || body.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await widget.api.call(
+        'support_reply',
+        body: {'ticketId': ticketId, 'message': body},
+      );
+      _reply.clear();
+      await Future.wait([_loadMessages(ticketId), _loadTickets()]);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _setStatus(String status) async {
+    final ticketId = _selectedId;
+    if (ticketId == null) return;
+    try {
+      await widget.api.call(
+        'support_ticket_status',
+        body: {'ticketId': ticketId, 'status': status},
+      );
+      await _loadTickets();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_message(error))));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(48),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    final selected = _tickets
+        .where((ticket) => ticket['id'] == _selectedId)
+        .firstOrNull;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _query,
+          onSubmitted: (_) => _loadTickets(),
+          decoration: InputDecoration(
+            labelText: 'Поиск по теме или мастеру',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: IconButton(
+              tooltip: 'Найти',
+              onPressed: _loadTickets,
+              icon: const Icon(Icons.search),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              for (final item in const [
+                ('all', 'Все'),
+                ('open', 'Новые'),
+                ('in_progress', 'В работе'),
+                ('waiting_user', 'Ждут ответ'),
+                ('resolved', 'Закрытые'),
+              ]) ...[
+                ChoiceChip(
+                  label: Text(item.$2),
+                  selected: _status == item.$1,
+                  onSelected: (_) {
+                    if (_status == item.$1) return;
+                    setState(() => _status = item.$1);
+                    _loadTickets();
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (_error != null)
+          _InlineError(message: _error!)
+        else if (_tickets.isEmpty)
+          const _EmptyPanel(
+            icon: Icons.support_agent_outlined,
+            text: 'Обращений по этому фильтру нет',
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact = constraints.maxWidth < 760;
+              if (compact && selected != null) {
+                return _SupportConversation(
+                  ticket: selected,
+                  messages: _messages,
+                  loading: _loadingMessages,
+                  controller: _reply,
+                  sending: _sending,
+                  onBack: () => setState(() {
+                    _selectedId = null;
+                    _messages = [];
+                  }),
+                  onRefresh: () => _loadMessages(_selectedId!),
+                  onSend: _sendReply,
+                  onStatus: _setStatus,
+                );
+              }
+              final list = _SupportTicketList(
+                tickets: _tickets,
+                selectedId: _selectedId,
+                onTap: _select,
+              );
+              if (compact) return list;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 330, child: list),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: selected == null
+                        ? const _EmptyPanel(
+                            icon: Icons.forum_outlined,
+                            text: 'Выберите обращение, чтобы открыть переписку',
+                          )
+                        : _SupportConversation(
+                            ticket: selected,
+                            messages: _messages,
+                            loading: _loadingMessages,
+                            controller: _reply,
+                            sending: _sending,
+                            onRefresh: () => _loadMessages(_selectedId!),
+                            onSend: _sendReply,
+                            onStatus: _setStatus,
+                          ),
+                  ),
+                ],
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _SupportTicketList extends StatelessWidget {
+  const _SupportTicketList({
+    required this.tickets,
+    required this.selectedId,
+    required this.onTap,
+  });
+
+  final List<Map<String, dynamic>> tickets;
+  final String? selectedId;
+  final ValueChanged<Map<String, dynamic>> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SmetchikCard(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        children: [
+          for (final ticket in tickets) ...[
+            _AdminSupportTicketTile(
+              ticket: ticket,
+              selected: ticket['id'] == selectedId,
+              onTap: () => onTap(ticket),
+            ),
+            if (ticket != tickets.last) const SizedBox(height: 6),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminSupportTicketTile extends StatelessWidget {
+  const _AdminSupportTicketTile({
+    required this.ticket,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Map<String, dynamic> ticket;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _fallback(ticket['status'], 'open');
+    return Material(
+      color: selected ? AppColors.orangeLight : Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _fallback(ticket['subject'], 'Обращение'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  _AdminSupportStatusPill(status: status),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _fallback(ticket['userName'], 'Пользователь'),
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              if (_fallback(ticket['last_message_preview'], '').isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _fallback(ticket['last_message_preview'], ''),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textHint,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SupportConversation extends StatelessWidget {
+  const _SupportConversation({
+    required this.ticket,
+    required this.messages,
+    required this.loading,
+    required this.controller,
+    required this.sending,
+    required this.onRefresh,
+    required this.onSend,
+    required this.onStatus,
+    this.onBack,
+  });
+
+  final Map<String, dynamic> ticket;
+  final List<Map<String, dynamic>> messages;
+  final bool loading;
+  final TextEditingController controller;
+  final bool sending;
+  final VoidCallback onRefresh;
+  final VoidCallback onSend;
+  final ValueChanged<String> onStatus;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _fallback(ticket['status'], 'open');
+    final resolved = status == 'resolved';
+    return SmetchikCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              if (onBack != null) ...[
+                IconButton.outlined(
+                  tooltip: 'К обращениям',
+                  onPressed: onBack,
+                  icon: const Icon(Icons.arrow_back),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _fallback(ticket['subject'], 'Обращение'),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      '${_fallback(ticket['userName'], 'Пользователь')}${_fallback(ticket['userPhone'], '').isEmpty ? '' : ' · ${_fallback(ticket['userPhone'], '')}'}',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Статус обращения',
+                onSelected: onStatus,
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'open', child: Text('Новое')),
+                  PopupMenuItem(value: 'in_progress', child: Text('В работе')),
+                  PopupMenuItem(
+                    value: 'waiting_user',
+                    child: Text('Ждём ответ'),
+                  ),
+                  PopupMenuItem(value: 'resolved', child: Text('Закрыть')),
+                ],
+                child: _AdminSupportStatusPill(status: status),
+              ),
+              const SizedBox(width: 6),
+              IconButton.outlined(
+                tooltip: 'Обновить сообщения',
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          if (loading)
+            const Padding(
+              padding: EdgeInsets.all(28),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final message in messages) ...[
+                    _AdminSupportMessageBubble(message: message),
+                    if (message != messages.last) const SizedBox(height: 8),
+                  ],
+                ],
+              ),
+            ),
+          const SizedBox(height: 12),
+          if (resolved)
+            const _AdminNotice(
+              icon: Icons.check_circle_outline,
+              color: AppColors.success,
+              background: AppColors.successBg,
+              text:
+                  'Обращение закрыто. Измените статус на «В работе», чтобы ответить.',
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: controller,
+                  minLines: 2,
+                  maxLines: 5,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    labelText: 'Ответ мастеру',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: sending ? null : onSend,
+                  icon: sending
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_outlined),
+                  label: const Text('Отправить ответ'),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AdminSupportMessageBubble extends StatelessWidget {
+  const _AdminSupportMessageBubble({required this.message});
+
+  final Map<String, dynamic> message;
+
+  @override
+  Widget build(BuildContext context) {
+    final support = message['author_role'] == 'support';
+    return Align(
+      alignment: support ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(11, 9, 11, 7),
+          decoration: BoxDecoration(
+            color: support ? AppColors.graphite : Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: support ? null : Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _fallback(
+                  message['authorName'],
+                  support ? 'Поддержка' : 'Пользователь',
+                ),
+                style: TextStyle(
+                  color: support
+                      ? const Color(0xFFFFC58E)
+                      : AppColors.orangeDark,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                _fallback(message['body'], ''),
+                style: TextStyle(
+                  color: support ? Colors.white : AppColors.graphite,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                _date(message['created_at']) == null
+                    ? '—'
+                    : formatDateTime(_date(message['created_at'])!),
+                style: TextStyle(
+                  color: support ? Colors.white70 : AppColors.textHint,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminSupportStatusPill extends StatelessWidget {
+  const _AdminSupportStatusPill({required this.status});
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = switch (status) {
+      'in_progress' => (AppColors.info, AppColors.infoBg, 'В работе'),
+      'waiting_user' => (
+        AppColors.orangeDark,
+        AppColors.orangeLight,
+        'Ждём ответ',
+      ),
+      'resolved' => (AppColors.success, AppColors.successBg, 'Закрыто'),
+      _ => (AppColors.orangeDark, AppColors.orangeLight, 'Новое'),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: style.$2,
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        style.$3,
+        style: TextStyle(
+          color: style.$1,
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
 class _AuditView extends StatefulWidget {
   const _AuditView({required this.api});
 
@@ -2457,6 +3060,7 @@ class _AuditViewState extends State<_AuditView> {
                 ('promos', 'Промокоды'),
                 ('documents', 'Документы'),
                 ('admins', 'Админы'),
+                ('support', 'Поддержка'),
               ]) ...[
                 ChoiceChip(
                   label: Text(item.$2),
@@ -3203,6 +3807,8 @@ String _auditLabel(String action) {
     'user_unblocked' => 'Пользователь разблокирован',
     'admin_role_changed' => 'Изменены права администратора',
     'signed_estimate_evidence_exported' => 'Выгружен пакет доказательств',
+    'support_replied' => 'Поддержка ответила на обращение',
+    'support_status_changed' => 'Изменён статус обращения',
     _ => action.replaceAll('_', ' '),
   };
 }

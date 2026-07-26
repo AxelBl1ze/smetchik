@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/app_error.dart';
 import '../../core/auth_controller.dart';
 import '../../legal/legal_documents.dart';
 import 'auth_legal_consent.dart';
@@ -959,9 +960,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     if (raw.contains('Signups not allowed')) {
       return 'Аккаунт с таким email не найден';
     }
-    return raw
-        .replaceFirst('AuthException(message: ', '')
-        .replaceFirst(')', '');
+    return appErrorMessage(error);
   }
 }
 

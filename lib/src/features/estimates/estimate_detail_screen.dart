@@ -9,6 +9,7 @@ import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/app_error.dart';
 import '../../core/app_config.dart';
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
@@ -323,7 +324,7 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
       }
     } catch (error) {
       if (context.mounted) {
-        _showFloatingSnackBar(context, error.toString(), isError: true);
+        _showFloatingSnackBar(context, appErrorMessage(error), isError: true);
       }
     } finally {
       if (mounted) setState(() => _pdfActionBusy = false);
@@ -342,7 +343,7 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
       await Printing.layoutPdf(onLayout: (_) async => bytes);
     } catch (error) {
       if (context.mounted) {
-        _showFloatingSnackBar(context, error.toString(), isError: true);
+        _showFloatingSnackBar(context, appErrorMessage(error), isError: true);
       }
     } finally {
       if (mounted) setState(() => _pdfActionBusy = false);
@@ -377,7 +378,7 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
       }
     } catch (error) {
       if (context.mounted) {
-        _showFloatingSnackBar(context, error.toString(), isError: true);
+        _showFloatingSnackBar(context, appErrorMessage(error), isError: true);
       }
     } finally {
       if (mounted) setState(() => _pdfActionBusy = false);
@@ -497,7 +498,7 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
       }
     } catch (error) {
       if (context.mounted) {
-        _showFloatingSnackBar(context, error.toString(), isError: true);
+        _showFloatingSnackBar(context, appErrorMessage(error), isError: true);
       }
     } finally {
       if (mounted) setState(() => _pdfActionBusy = false);
@@ -593,7 +594,7 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
       _showFloatingSnackBar(context, 'Смета принята и подписана клиентом');
     } catch (error) {
       if (context.mounted) {
-        _showFloatingSnackBar(context, error.toString(), isError: true);
+        _showFloatingSnackBar(context, appErrorMessage(error), isError: true);
       }
     } finally {
       if (mounted) setState(() => _pdfActionBusy = false);
@@ -638,7 +639,7 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
       context.go('/estimate/$copyId');
     } catch (error) {
       if (context.mounted) {
-        _showFloatingSnackBar(context, error.toString(), isError: true);
+        _showFloatingSnackBar(context, appErrorMessage(error), isError: true);
       }
     }
   }

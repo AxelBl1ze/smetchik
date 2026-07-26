@@ -22,6 +22,7 @@ import 'features/legal/legal_documents_screen.dart';
 import 'features/projects/project_detail_screen.dart';
 import 'features/projects/project_form_screen.dart';
 import 'features/settings/settings_screen.dart';
+import 'features/support/support_screen.dart';
 import 'shared/app_shell.dart';
 import 'shared/keyboard_dismiss_on_tap.dart';
 
@@ -124,6 +125,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/settings',
             pageBuilder: (context, state) =>
                 _page(state, const SettingsScreen()),
+          ),
+          GoRoute(
+            path: '/support',
+            pageBuilder: (context, state) =>
+                _page(state, const SupportScreen()),
+          ),
+          GoRoute(
+            path: '/support/:id',
+            pageBuilder: (context, state) => _page(
+              state,
+              SupportTicketDetailScreen(ticketId: state.pathParameters['id']!),
+            ),
           ),
         ],
       ),
@@ -250,12 +263,12 @@ Page<void> _page(GoRouterState state, Widget child) {
 }
 
 int _shellIndexForPath(String path) {
+  if (path == '/settings' || path.startsWith('/support')) return 4;
   return switch (path) {
     '/home' => 0,
     '/estimates' => 1,
     '/catalog' => 2,
     '/clients' => 3,
-    '/settings' => 4,
     _ => 0,
   };
 }

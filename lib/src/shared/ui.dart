@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/app_error.dart';
+
 import '../core/app_theme.dart';
 import '../data/models.dart';
 
@@ -609,10 +611,11 @@ class ErrorPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final info = describeAppError(error);
     return EmptyState(
       icon: Icons.error_outline,
-      title: 'Не удалось загрузить данные',
-      body: error.toString(),
+      title: info.title,
+      body: info.message,
     );
   }
 }

@@ -61,6 +61,14 @@ Deno.serve(async (request) => {
         return json(await evidence(context, body));
       case 'audit':
         return json(await audit(context, body));
+      case 'support_tickets':
+        return json(await supportTickets(context, body));
+      case 'support_messages':
+        return json(await supportMessages(context, body));
+      case 'support_reply':
+        return json(await supportReply(context, body));
+      case 'support_ticket_status':
+        return json(await setSupportTicketStatus(context, body));
       default:
         throw new HttpError('Неизвестное действие админ-панели.', 400);
     }
@@ -596,6 +604,161 @@ async function audit(context: AdminContext, body: JsonRecord): Promise<JsonRecor
   return { events };
 }
 
+const supportTicketStatuses = ['open', 'in_progress', 'waiting_user', 'resolved'];
+
+async function supportTickets(
+  context: AdminContext,
+  body: JsonRecord,
+): Promise<JsonRecord> {
+  requireSupport(context);
+  const query = (firstString(body.query) ?? '').toLowerCase();
+  const status = firstString(body.status) ?? 'all';
+  const response = await context.admin
+    .from('support_tickets')
+    .select('id,user_id,subject,status,context,last_message_preview,last_message_at,created_at,updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(200);
+  if (response.error) throw response.error;
+  const rows = response.data ?? [];
+  const userIds = [...new Set(rows.map((ticket) => ticket.user_id))];
+  const profiles = userIds.length
+    ? await context.admin
+      .from('profiles')
+      .select('id,full_name,phone')
+      .in('id', userIds)
+    : { data: [], error: null };
+  if (profiles.error) throw profiles.error;
+  const profileById = new Map(
+    (profiles.data ?? []).map((profile) => [profile.id, profile]),
+  );
+
+  const tickets = rows
+    .map((ticket) => {
+      const profile = profileById.get(ticket.user_id);
+      return {
+        ...ticket,
+        userName: profile?.full_name ?? 'Пользователь',
+        userPhone: profile?.phone ?? null,
+      };
+    })
+    .filter((ticket) => {
+      if (status !== 'all' && ticket.status !== status) return false;
+      if (!query) return true;
+      return [
+        ticket.subject,
+        ticket.last_message_preview,
+        ticket.userName,
+        ticket.userPhone,
+      ].filter(Boolean).join(' ').toLowerCase().includes(query);
+    });
+  return { tickets };
+}
+
+async function supportMessages(
+  context: AdminContext,
+  body: JsonRecord,
+): Promise<JsonRecord> {
+  requireSupport(context);
+  const ticketId = requiredUuid(body.ticketId, 'обращение');
+  const ticket = await context.admin
+    .from('support_tickets')
+    .select('id,user_id,subject,status,created_at,updated_at')
+    .eq('id', ticketId)
+    .maybeSingle();
+  if (ticket.error) throw ticket.error;
+  if (!ticket.data) throw new HttpError('Обращение не найдено.', 404);
+  const response = await context.admin
+    .from('support_messages')
+    .select('id,ticket_id,author_user_id,author_role,body,created_at')
+    .eq('ticket_id', ticketId)
+    .order('created_at');
+  if (response.error) throw response.error;
+  const authorIds = [...new Set(
+    (response.data ?? [])
+      .map((message) => message.author_user_id)
+      .filter(Boolean),
+  )];
+  const profiles = authorIds.length
+    ? await context.admin
+      .from('profiles')
+      .select('id,full_name')
+      .in('id', authorIds)
+    : { data: [], error: null };
+  if (profiles.error) throw profiles.error;
+  const names = new Map((profiles.data ?? []).map((profile) => [profile.id, profile.full_name]));
+  return {
+    ticket: ticket.data,
+    messages: (response.data ?? []).map((message) => ({
+      ...message,
+      authorName: names.get(message.author_user_id) ??
+        (message.author_role === 'support' ? 'Поддержка' : 'Пользователь'),
+    })),
+  };
+}
+
+async function supportReply(
+  context: AdminContext,
+  body: JsonRecord,
+): Promise<JsonRecord> {
+  requireSupport(context);
+  const ticketId = requiredUuid(body.ticketId, 'обращение');
+  const message = requiredSupportMessage(body.message);
+  const ticket = await context.admin
+    .from('support_tickets')
+    .select('id,status')
+    .eq('id', ticketId)
+    .maybeSingle();
+  if (ticket.error) throw ticket.error;
+  if (!ticket.data) throw new HttpError('Обращение не найдено.', 404);
+  if (ticket.data.status === 'resolved') {
+    throw new HttpError('Обращение уже закрыто. Сначала откройте его снова.', 409);
+  }
+  const response = await context.admin.from('support_messages').insert({
+    ticket_id: ticketId,
+    author_user_id: context.user.id,
+    author_role: 'support',
+    body: message,
+  }).select('id').single();
+  if (response.error) throw response.error;
+  const update = await context.admin
+    .from('support_tickets')
+    .update({ status: 'waiting_user' })
+    .eq('id', ticketId);
+  if (update.error) throw update.error;
+  await logEvent(context, 'support_replied', 'support_ticket', ticketId);
+  return { messageId: response.data.id };
+}
+
+async function setSupportTicketStatus(
+  context: AdminContext,
+  body: JsonRecord,
+): Promise<JsonRecord> {
+  requireSupport(context);
+  const ticketId = requiredUuid(body.ticketId, 'обращение');
+  const status = firstString(body.status);
+  if (!status || !supportTicketStatuses.includes(status)) {
+    throw new HttpError('Выберите корректный статус обращения.', 400);
+  }
+  const response = await context.admin
+    .from('support_tickets')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', ticketId)
+    .select('id,status')
+    .maybeSingle();
+  if (response.error) throw response.error;
+  if (!response.data) throw new HttpError('Обращение не найдено.', 404);
+  await logEvent(context, 'support_status_changed', 'support_ticket', ticketId, { status });
+  return { ticket: response.data };
+}
+
+function requiredSupportMessage(value: unknown): string {
+  const message = firstString(value);
+  if (!message || message.length > 4000) {
+    throw new HttpError('Введите сообщение до 4 000 символов.', 400);
+  }
+  return message;
+}
+
 async function signedEvidenceFiles(admin: ReturnType<typeof createClient>, estimate: JsonRecord) {
   const files: JsonRecord = {};
   const signedPdf = firstString(estimate.signed_pdf_storage_path);
@@ -666,6 +829,7 @@ function auditCategory(action: string) {
   if (action.includes('evidence') || action.includes('signed')) return 'documents';
   if (action.includes('admin_role')) return 'admins';
   if (action.includes('block') || action.includes('subscription')) return 'access';
+  if (action.includes('support')) return 'support';
   return 'other';
 }
 

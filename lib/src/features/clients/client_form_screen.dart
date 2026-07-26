@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/app_error.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../../shared/address_autocomplete_field.dart';
@@ -146,9 +147,7 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
         );
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppErrorSnackBar(context, error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

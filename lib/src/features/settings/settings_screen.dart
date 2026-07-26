@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/app_error.dart';
 import '../../core/auth_controller.dart';
 import '../../data/models.dart';
 import '../../data/pdf_templates.dart';
@@ -309,6 +310,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
             ),
             const SizedBox(height: 18),
+            _SupportLauncherCard(onTap: () => context.push('/support')),
+            const SizedBox(height: 14),
             _LegalDocumentsCard(onTap: () => context.push('/legal')),
           ],
         ),
@@ -343,9 +346,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ).showSnackBar(const SnackBar(content: Text('Аватар обновлён')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppErrorSnackBar(context, error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -387,9 +388,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ).showSnackBar(const SnackBar(content: Text('Роспись сохранена')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppErrorSnackBar(context, error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -428,9 +427,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppErrorSnackBar(context, error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -641,9 +638,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showAppErrorSnackBar(context, error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -658,9 +653,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ref.invalidate(teamMembersProvider);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showAppErrorSnackBar(context, error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -674,9 +667,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ref.invalidate(teamInvitesProvider);
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showAppErrorSnackBar(context, error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -698,9 +689,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showAppErrorSnackBar(context, error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -741,9 +730,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return true;
     } catch (error) {
       if (!mounted) return false;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppErrorSnackBar(context, error);
       return false;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -787,9 +774,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ).showSnackBar(const SnackBar(content: Text('Профиль сохранён')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppErrorSnackBar(context, error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -826,9 +811,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         );
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppErrorSnackBar(context, error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -1074,6 +1057,68 @@ class _LegalDocumentsCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SupportLauncherCard extends StatelessWidget {
+  const _SupportLauncherCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SmetchikCard(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.all(2),
+          child: Row(
+            children: [
+              _SupportLauncherIcon(),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Помощь и поддержка',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    Text(
+                      'Обращения, ответы и помощь со входом',
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: AppColors.textHint),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SupportLauncherIcon extends StatelessWidget {
+  const _SupportLauncherIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: AppColors.orangeLight,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Icon(Icons.support_agent_rounded, color: AppColors.orange),
     );
   }
 }

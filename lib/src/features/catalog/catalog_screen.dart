@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/app_error.dart';
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/pdf_service.dart';
@@ -522,9 +523,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       );
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
+        showAppErrorSnackBar(context, error);
       }
     } finally {
       if (mounted) setState(() => _sharing = false);

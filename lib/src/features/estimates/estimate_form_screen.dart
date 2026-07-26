@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/app_error.dart';
 import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/offline_sync_service.dart';
@@ -538,9 +539,7 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
         context.go('/estimates');
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.toString())));
+      showAppErrorSnackBar(context, error);
     } finally {
       if (mounted) setState(() => _saving = false);
     }

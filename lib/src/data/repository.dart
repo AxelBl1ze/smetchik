@@ -67,6 +67,15 @@ final incomingTeamInvitesProvider =
       return ref.watch(repositoryProvider).fetchIncomingTeamInvites();
     });
 
+final supportTicketsProvider = FutureProvider<List<SupportTicketModel>>((ref) {
+  return ref.watch(repositoryProvider).fetchSupportTickets();
+});
+
+final supportMessagesProvider =
+    FutureProvider.family<List<SupportMessageModel>, String>((ref, ticketId) {
+      return ref.watch(repositoryProvider).fetchSupportMessages(ticketId);
+    });
+
 final estimateDetailProvider = FutureProvider.family<EstimateDetail, String>((
   ref,
   id,
@@ -1139,6 +1148,64 @@ class SmetchikRepository {
 
   Future<void> acceptTeamInvite(String inviteId) async {
     await _client.rpc('accept_team_invite', params: {'p_invite_id': inviteId});
+  }
+
+  Future<List<SupportTicketModel>> fetchSupportTickets() async {
+    final rows = await _client
+        .from('support_tickets')
+        .select(
+          'id,subject,status,last_message_preview,last_message_at,created_at,updated_at',
+        )
+        .eq('user_id', _userId)
+        .order('updated_at', ascending: false);
+    return _asMaps(rows).map(SupportTicketModel.fromMap).toList();
+  }
+
+  Future<List<SupportMessageModel>> fetchSupportMessages(
+    String ticketId,
+  ) async {
+    final rows = await _client
+        .from('support_messages')
+        .select('id,ticket_id,author_role,body,created_at')
+        .eq('ticket_id', ticketId)
+        .order('created_at');
+    return _asMaps(rows).map(SupportMessageModel.fromMap).toList();
+  }
+
+  Future<String> createSupportTicket({
+    required String subject,
+    required String message,
+    Map<String, dynamic> context = const {},
+  }) async {
+    final ticket = await _client
+        .from('support_tickets')
+        .insert({
+          'user_id': _userId,
+          'subject': subject.trim(),
+          'context': context,
+        })
+        .select('id')
+        .single();
+    final id = ticket['id'] as String;
+    await _client.from('support_messages').insert({
+      'ticket_id': id,
+      'author_user_id': _userId,
+      'author_role': 'user',
+      'body': message.trim(),
+    });
+    return id;
+  }
+
+  Future<void> sendSupportMessage({
+    required String ticketId,
+    required String message,
+  }) async {
+    await _client.from('support_messages').insert({
+      'ticket_id': ticketId,
+      'author_user_id': _userId,
+      'author_role': 'user',
+      'body': message.trim(),
+    });
   }
 
   Future<void> _ensureCanCreateProject({String? excludingProjectId}) async {

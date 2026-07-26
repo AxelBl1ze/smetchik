@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/app_error.dart';
 import '../../data/models.dart';
 import '../../data/offline_sync_service.dart';
 import '../../data/repository.dart';
@@ -252,7 +253,7 @@ class _ProjectFormScreenState extends ConsumerState<ProjectFormScreen> {
       context.go('/projects/$id');
     } catch (error) {
       if (!mounted) return;
-      final message = error.toString().replaceFirst('Exception: ', '');
+      final message = appErrorMessage(error);
       if (message.contains('Базовом тарифе')) {
         showUpgradeSheet(
           context: context,

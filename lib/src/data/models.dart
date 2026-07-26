@@ -1048,6 +1048,93 @@ class IncomingTeamInviteModel {
       );
 }
 
+class SupportTicketStatus {
+  const SupportTicketStatus._();
+
+  static const open = 'open';
+  static const inProgress = 'in_progress';
+  static const waitingUser = 'waiting_user';
+  static const resolved = 'resolved';
+
+  static String normalize(String? value) {
+    return switch (value) {
+      inProgress => inProgress,
+      waitingUser => waitingUser,
+      resolved => resolved,
+      _ => open,
+    };
+  }
+
+  static String label(String value) {
+    return switch (normalize(value)) {
+      inProgress => 'В работе',
+      waitingUser => 'Ждём ваш ответ',
+      resolved => 'Закрыто',
+      _ => 'Новое',
+    };
+  }
+}
+
+class SupportTicketModel {
+  const SupportTicketModel({
+    required this.id,
+    required this.subject,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+    this.lastMessagePreview,
+    this.lastMessageAt,
+  });
+
+  final String id;
+  final String subject;
+  final String status;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String? lastMessagePreview;
+  final DateTime? lastMessageAt;
+
+  factory SupportTicketModel.fromMap(Map<String, dynamic> map) {
+    return SupportTicketModel(
+      id: map['id'] as String,
+      subject: (map['subject'] as String?) ?? 'Обращение в поддержку',
+      status: SupportTicketStatus.normalize(map['status'] as String?),
+      createdAt: asDate(map['created_at']),
+      updatedAt: asDate(map['updated_at']),
+      lastMessagePreview: map['last_message_preview'] as String?,
+      lastMessageAt: asDateOrNull(map['last_message_at']),
+    );
+  }
+}
+
+class SupportMessageModel {
+  const SupportMessageModel({
+    required this.id,
+    required this.ticketId,
+    required this.authorRole,
+    required this.body,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String ticketId;
+  final String authorRole;
+  final String body;
+  final DateTime createdAt;
+
+  bool get isFromSupport => authorRole == 'support';
+
+  factory SupportMessageModel.fromMap(Map<String, dynamic> map) {
+    return SupportMessageModel(
+      id: map['id'] as String,
+      ticketId: map['ticket_id'] as String,
+      authorRole: (map['author_role'] as String?) ?? 'user',
+      body: (map['body'] as String?) ?? '',
+      createdAt: asDate(map['created_at']),
+    );
+  }
+}
+
 class EstimateModel {
   const EstimateModel({
     required this.id,
