@@ -58,7 +58,7 @@
               </div>
               <div class="product-tabs" role="tablist" aria-label="Экраны приложения">
                 <button class="product-tab is-active" type="button" data-product-tab="estimate" role="tab" aria-selected="true">Смета</button>
-                <button class="product-tab" type="button" data-product-tab="approval" role="tab" aria-selected="false">Подпись</button>
+                <button class="product-tab" type="button" data-product-tab="approval" role="tab" aria-selected="false">Клиент</button>
                 <button class="product-tab" type="button" data-product-tab="object" role="tab" aria-selected="false">Объект</button>
               </div>
               <div class="product-screen is-active" data-product-screen="estimate">
@@ -74,7 +74,7 @@
               </div>
               <div class="product-screen" data-product-screen="approval" hidden>
                 <div class="approval-stamp">СМЕТА #A8F231</div>
-                <h2>Клиент принял смету</h2>
+                <h2>Смета принята</h2>
                 <p>Версия документа, дата, время и подпись сохранены вместе с PDF.</p>
                 <div class="signature-panel"><span>Подпись заказчика</span><b>Александр К.</b><i>подписано 12.07.2026 · 16:46</i><strong>А.К.</strong></div>
                 <div class="approval-proof"><span>Документ заблокирован от изменений</span><b>✓</b></div>
@@ -87,8 +87,14 @@
                 <div class="operation"><span class="operation-mark plus">+</span><div><b>Аванс клиента</b><small>Поступление · сегодня</small></div><em>150 000 ₽</em></div>
               </div>
             </div>
-            <div class="stage-note note-left"><b>Прайс-лист</b><span>Свои работы и цены</span></div>
-            <div class="stage-note note-right"><b>Без таблиц</b><span>Итог считается сам</span></div>
+            <div class="scenario-rail" aria-live="polite">
+              <span class="scenario-number" data-scenario-number>01</span>
+              <div>
+                <b data-scenario-title>Смета собрана</b>
+                <span data-scenario-copy>Работы, клиент и итог уже на месте.</span>
+              </div>
+              <span class="scenario-state" data-scenario-state>3–5 мин</span>
+            </div>
           </div>
         </div>
       </section>
@@ -96,8 +102,8 @@
       <section class="intro-band">
         <div class="container intro-grid reveal">
           <p>Не бухгалтерия для офиса.</p>
-          <p>Рабочий инструмент, который открывается одной рукой прямо на объекте.</p>
-          <span>01 / 05</span>
+          <p>Один короткий маршрут: от работ в прайс-листе до подписанного PDF и денег по объекту.</p>
+          <span>СМЕТА → ПОДПИСЬ → ОБЪЕКТ</span>
         </div>
       </section>
 
@@ -122,6 +128,14 @@
               <div class="document-lines"><span></span><span></span><span></span><span></span></div>
               <div class="document-sign"><div><i></i><span>Исполнитель</span></div><div><i class="client-sign">А.К.</i><span>Заказчик · 12.07.2026</span></div></div>
               <footer>Версия 1 · документ подписан</footer>
+              <div class="proof-reader" aria-label="Что сохраняется в подписанной смете">
+                <div class="proof-controls" role="tablist" aria-label="Данные документа">
+                  <button class="is-active" type="button" data-proof="version" aria-selected="true">Версия</button>
+                  <button type="button" data-proof="signature" aria-selected="false">Подпись</button>
+                  <button type="button" data-proof="package" aria-selected="false">Пакет</button>
+                </div>
+                <p data-proof-copy>Сохраняется именно та версия сметы, которую видел клиент.</p>
+              </div>
             </article>
           </div>
         </div>
@@ -172,7 +186,7 @@
             <p><b>Версия документа</b><span>Фиксируется вместе с PDF.</span></p>
             <p><b>Дата и время</b><span>Сохраняются при подтверждении.</span></p>
             <p><b>Подпись и данные клиента</b><span>Входят в пакет доказательств.</span></p>
-            <p><b>Доступ к данным</b><span>Только у владельца аккаунта и назначенных администраторов.</span></p>
+            <p><b>Пакет доказательств</b><span>PDF, подписи, версия и служебные данные доступны вместе.</span></p>
           </div>
         </div>
       </section>
@@ -181,7 +195,7 @@
         <div class="container">
           <div class="plans-heading reveal"><p class="kicker kicker-dark">Тарифы без мелкого шрифта</p><h2>Начните с Базового. Подключайте больше только когда работа этого требует.</h2></div>
           <div class="plan-table reveal" role="table" aria-label="Тарифы Сметчика">
-            <div class="plan-row plan-row-head" role="row"><span>Возможность</span><b>Базовый</b><b>Профи</b><b>Бригада</b></div>
+            <div class="plan-row plan-row-head" role="row"><span>Возможность</span><b>Базовый<small>первые заказы</small></b><b>Профи<small>каждый день</small></b><b>Бригада<small>работа в команде</small></b></div>
             <div class="plan-row" role="row"><span>Стоимость</span><b>0 ₽</b><b>399 ₽ / мес</b><b>1 490 ₽ / мес</b></div>
             <div class="plan-row" role="row"><span>Новые сметы</span><span>10 в месяц</span><span>Безлимитно</span><span>Безлимитно</span></div>
             <div class="plan-row" role="row"><span>Клиенты и объекты</span><span>20 / 1 активный</span><span>Безлимитно</span><span>Безлимитно</span></div>
