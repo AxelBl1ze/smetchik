@@ -39,6 +39,112 @@ extension on _ProjectExportFormat {
   };
 }
 
+Future<String?> _showObjectActions(
+  BuildContext context, {
+  required String title,
+  required String editLabel,
+  String? primaryLabel,
+  IconData? primaryIcon,
+}) {
+  return showModalBottomSheet<String>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (context) => SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.all(10),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+            ),
+            const SizedBox(height: 12),
+            if (primaryLabel != null) ...[
+              _ObjectActionTile(
+                icon: primaryIcon ?? Icons.check,
+                label: primaryLabel,
+                onTap: () => Navigator.pop(context, 'primary'),
+              ),
+              const SizedBox(height: 8),
+            ],
+            _ObjectActionTile(
+              icon: Icons.edit_outlined,
+              label: editLabel,
+              onTap: () => Navigator.pop(context, 'edit'),
+            ),
+            const SizedBox(height: 8),
+            _ObjectActionTile(
+              icon: Icons.delete_outline,
+              label: 'Удалить',
+              danger: true,
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _ObjectActionTile extends StatelessWidget {
+  const _ObjectActionTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.danger = false,
+  });
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool danger;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: danger
+        ? AppColors.danger.withValues(alpha: .06)
+        : AppColors.background,
+    borderRadius: BorderRadius.circular(14),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, color: danger ? AppColors.danger : AppColors.graphite),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: danger ? AppColors.danger : AppColors.graphite,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class ProjectDetailScreen extends ConsumerStatefulWidget {
   const ProjectDetailScreen({super.key, required this.projectId});
 
@@ -1219,27 +1325,23 @@ class _MaterialCard extends StatelessWidget {
             ],
           ),
         ),
-        PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'purchase') {
-              onPurchase();
-            } else if (value == 'edit') {
-              onEdit();
-            } else {
-              onDelete();
-            }
-          },
-          itemBuilder: (_) => [
-            PopupMenuItem(
-              value: 'purchase',
-              child: Text(
-                material.isPurchased ? 'Изменить покупку' : 'Отметить покупку',
-              ),
-            ),
-            const PopupMenuItem(value: 'edit', child: Text('Изменить план')),
-            const PopupMenuItem(value: 'delete', child: Text('Удалить')),
-          ],
+        IconButton(
+          tooltip: 'Действия с материалом',
           icon: const Icon(Icons.more_horiz),
+          onPressed: () async {
+            final value = await _showObjectActions(
+              context,
+              title: material.title,
+              primaryLabel: material.isPurchased
+                  ? 'Изменить покупку'
+                  : 'Отметить покупку',
+              primaryIcon: Icons.shopping_bag_outlined,
+              editLabel: 'Изменить план',
+            );
+            if (value == 'primary') onPurchase();
+            if (value == 'edit') onEdit();
+            if (value == 'delete') onDelete();
+          },
         ),
       ],
     ),
@@ -1313,14 +1415,19 @@ class _TransactionCard extends StatelessWidget {
                 '${income ? '+' : '−'}${formatMoney(transaction.amount)}',
                 style: TextStyle(color: color, fontWeight: FontWeight.w900),
               ),
-              PopupMenuButton<String>(
+              IconButton(
                 padding: EdgeInsets.zero,
-                onSelected: (value) => value == 'edit' ? onEdit() : onDelete(),
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'edit', child: Text('Изменить')),
-                  PopupMenuItem(value: 'delete', child: Text('Удалить')),
-                ],
+                tooltip: 'Действия с операцией',
                 icon: const Icon(Icons.more_horiz, size: 20),
+                onPressed: () async {
+                  final value = await _showObjectActions(
+                    context,
+                    title: transaction.title,
+                    editLabel: 'Изменить операцию',
+                  );
+                  if (value == 'edit') onEdit();
+                  if (value == 'delete') onDelete();
+                },
               ),
             ],
           ),
@@ -1394,7 +1501,9 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     final editing = widget.transaction != null;
-    return Padding(
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
       padding: EdgeInsets.only(bottom: bottom),
       child: SafeArea(
         top: false,
@@ -1855,7 +1964,9 @@ class _CompactProjectSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
-    child: Padding(
+    child: AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Align(
         alignment: Alignment.bottomCenter,

@@ -185,21 +185,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             child: const Text('Забыли пароль?'),
           ),
         ),
-        const SizedBox(height: 10),
-        SignupConsentRow(
-          value: _termsAccepted,
-          label: 'Принимаю',
-          documentTitle: LegalDocuments.terms.title,
-          onChanged: (value) => setState(() => _termsAccepted = value),
-          onOpen: () => context.push('/legal/terms'),
-        ),
-        SignupConsentRow(
-          value: _privacyAccepted,
-          label: 'Соглашаюсь с',
-          documentTitle: LegalDocuments.privacy.title,
-          onChanged: (value) => setState(() => _privacyAccepted = value),
-          onOpen: () => context.push('/legal/privacy'),
-        ),
         _Messages(error: _error, info: _info),
         const SizedBox(height: 14),
         FilledButton.icon(
@@ -398,6 +383,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             labelText: 'Пароль',
             prefixIcon: Icon(Icons.lock_outline),
           ),
+        ),
+        const SizedBox(height: 10),
+        SignupConsentRow(
+          value: _termsAccepted,
+          label: 'Принимаю',
+          documentTitle: LegalDocuments.terms.title,
+          onChanged: (value) => setState(() => _termsAccepted = value),
+          onOpen: () => context.push('/legal/terms'),
+        ),
+        SignupConsentRow(
+          value: _privacyAccepted,
+          label: 'Соглашаюсь с',
+          documentTitle: LegalDocuments.privacy.title,
+          onChanged: (value) => setState(() => _privacyAccepted = value),
+          onOpen: () => context.push('/legal/privacy'),
         ),
         _Messages(error: _error, info: _info),
         const SizedBox(height: 18),
@@ -690,6 +690,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
     if (password.length < 6) {
       _setError('Пароль должен быть не короче 6 символов');
+      return;
+    }
+    if (!_termsAccepted || !_privacyAccepted) {
+      _setError('Ознакомьтесь и согласитесь с документами');
       return;
     }
 

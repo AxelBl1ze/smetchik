@@ -5022,7 +5022,9 @@ class _TeamInviteSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
-    child: Padding(
+    child: AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
