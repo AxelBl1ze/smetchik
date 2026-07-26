@@ -137,9 +137,17 @@ class _ClientFormScreenState extends ConsumerState<ClientFormScreen> {
       ref.invalidate(clientsProvider);
       if (!mounted) return;
       if (widget.clientId != null) {
-        context.go('/clients/${widget.clientId}');
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/clients/${widget.clientId}');
+        }
       } else {
-        context.go('/clients');
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go('/clients');
+        }
       }
     } catch (error) {
       if (!mounted) return;

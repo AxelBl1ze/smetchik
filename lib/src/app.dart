@@ -131,8 +131,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/estimates',
-            pageBuilder: (context, state) =>
-                _page(state, const EstimatesScreen()),
+            pageBuilder: (context, state) => _page(
+              state,
+              EstimatesScreen(clientId: state.uri.queryParameters['clientId']),
+            ),
           ),
           GoRoute(
             path: '/catalog',
