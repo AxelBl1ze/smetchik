@@ -10,6 +10,8 @@ final authControllerProvider = ChangeNotifierProvider<AuthController>((ref) {
   return AuthController();
 });
 
+enum SignUpResult { signedIn, needsEmailConfirmation }
+
 class AuthController extends ChangeNotifier {
   AuthController() {
     if (!AppConfig.hasSupabaseConfig) return;
@@ -64,14 +66,14 @@ class AuthController extends ChangeNotifier {
     });
   }
 
-  Future<void> signUp({
+  Future<SignUpResult> signUp({
     required String email,
     required String password,
     required String fullName,
     required String termsVersion,
     required String privacyVersion,
   }) async {
-    await _run(() async {
+    return _run(() async {
       // Registration is only reachable for signed-out users. Clear any stale
       // local session before creating a new account so sessions cannot cross.
       if (_client!.auth.currentSession != null) {
@@ -88,10 +90,21 @@ class AuthController extends ChangeNotifier {
           'legal_accepted_at': DateTime.now().toUtc().toIso8601String(),
         },
       );
-      if (response.session == null && response.user != null) {
+      final registeredUser = response.user;
+      if (registeredUser == null) {
         throw const AuthException(
-          'Аккаунт создан. Если включено подтверждение email, проверьте почту и затем войдите.',
+          'Не удалось создать аккаунт. Повторите попытку.',
         );
+      }
+      // Supabase returns a user without identities for an existing email when
+      // confirmation is enabled. Turn that opaque response into useful UI.
+      if (registeredUser.identities?.isEmpty ?? false) {
+        throw const AuthException(
+          'Аккаунт с этим email уже существует. Войдите или восстановите пароль.',
+        );
+      }
+      if (response.session == null && response.user != null) {
+        return SignUpResult.needsEmailConfirmation;
       }
       if (response.session != null) {
         final signedUpEmail = response.session!.user.email
@@ -104,6 +117,33 @@ class AuthController extends ChangeNotifier {
         }
         user = response.session!.user;
       }
+      return SignUpResult.signedIn;
+    });
+  }
+
+  Future<void> resendSignupConfirmationCode({required String email}) async {
+    await _run(() async {
+      await _client!.auth.resend(type: OtpType.signup, email: email.trim());
+    });
+  }
+
+  Future<void> verifySignupEmailCode({
+    required String email,
+    required String code,
+  }) async {
+    await _run(() async {
+      final response = await _client!.auth.verifyOTP(
+        email: email.trim(),
+        token: code.trim(),
+        type: OtpType.signup,
+      );
+      final signedInEmail = response.user?.email?.trim().toLowerCase();
+      if (response.session == null ||
+          signedInEmail != email.trim().toLowerCase()) {
+        await _client!.auth.signOut(scope: SignOutScope.local);
+        throw const AuthException('Код не подтвердил указанный email.');
+      }
+      user = response.user;
     });
   }
 
@@ -228,14 +268,14 @@ class AuthController extends ChangeNotifier {
     });
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  Future<T> _run<T>(Future<T> Function() action) async {
     if (_client == null) {
       throw StateError('Supabase is not configured.');
     }
     isBusy = true;
     notifyListeners();
     try {
-      await action();
+      return await action();
     } finally {
       isBusy = false;
       notifyListeners();

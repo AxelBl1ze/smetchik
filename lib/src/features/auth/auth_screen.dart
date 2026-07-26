@@ -13,7 +13,14 @@ import 'auth_legal_consent.dart';
 import '../../shared/russian_phone_input_formatter.dart';
 import '../../shared/ui.dart';
 
-enum AuthEntryMode { password, code, register, resetRequest, resetPassword }
+enum AuthEntryMode {
+  password,
+  code,
+  register,
+  verifySignupEmail,
+  resetRequest,
+  resetPassword,
+}
 
 enum _CodeTarget { email, phone }
 
@@ -40,6 +47,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   bool _codeRequested = false;
   bool _termsAccepted = false;
   bool _privacyAccepted = false;
+  String? _pendingSignupEmail;
   String? _error;
   String? _info;
 
@@ -75,7 +83,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               maxWidth: isWide ? 1040 : 480,
               child: isWide
                   ? _AuthDesktopStage(
-                      isRegister: _mode == AuthEntryMode.register,
+                      isRegister:
+                          _mode == AuthEntryMode.register ||
+                          _mode == AuthEntryMode.verifySignupEmail,
                       form: _buildAuthCard(auth, framed: false),
                     )
                   : _buildAuthCard(auth),
@@ -147,6 +157,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   Widget _buildModeBody(AuthController auth) {
     return switch (_mode) {
       AuthEntryMode.register => _buildRegister(auth),
+      AuthEntryMode.verifySignupEmail => _buildSignupEmailConfirmation(auth),
       AuthEntryMode.resetRequest => _buildResetRequest(auth),
       AuthEntryMode.resetPassword => _buildResetPassword(auth),
       AuthEntryMode.code => _buildCodeLogin(auth),
@@ -425,6 +436,44 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     );
   }
 
+  Widget _buildSignupEmailConfirmation(AuthController auth) {
+    final email = _pendingSignupEmail ?? _email.text.trim();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _HintBox(
+          icon: Icons.mark_email_read_outlined,
+          title: 'Код отправлен',
+          text:
+              'Мы отправили 6 цифр на $email. Подтвердите адрес, чтобы открыть ваш аккаунт и не потерять к нему доступ.',
+        ),
+        const SizedBox(height: 16),
+        _CodeInput(
+          controller: _code,
+          enabled: !auth.isBusy,
+          label: 'Код из письма',
+          onCompleted: (_) => auth.isBusy ? null : _verifySignupEmailCode(),
+        ),
+        _Messages(error: _error, info: _info),
+        const SizedBox(height: 18),
+        FilledButton.icon(
+          onPressed: auth.isBusy ? null : _verifySignupEmailCode,
+          icon: _BusyIcon(
+            isBusy: auth.isBusy,
+            fallback: Icons.verified_outlined,
+          ),
+          label: const Text('Подтвердить email'),
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: auth.isBusy ? null : _resendSignupEmailCode,
+          icon: const Icon(Icons.refresh),
+          label: const Text('Отправить код ещё раз'),
+        ),
+      ],
+    );
+  }
+
   Widget _buildResetRequest(AuthController auth) {
     final isEmail = _codeTarget == _CodeTarget.email;
 
@@ -632,6 +681,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   String get _title {
     return switch (_mode) {
       AuthEntryMode.register => 'Создать аккаунт',
+      AuthEntryMode.verifySignupEmail => 'Подтвердите email',
       AuthEntryMode.resetRequest => 'Восстановить пароль',
       AuthEntryMode.resetPassword => 'Новый пароль',
       AuthEntryMode.code => 'Войти по коду',
@@ -643,6 +693,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     return switch (_mode) {
       AuthEntryMode.register =>
         'Пара минут, и можно делать первые сметы для клиентов.',
+      AuthEntryMode.verifySignupEmail =>
+        'Это защитит доступ к вашему аккаунту и данным.',
       AuthEntryMode.resetRequest =>
         'Получите код на email или подтвердите номер через Telegram.',
       AuthEntryMode.resetPassword =>
@@ -705,7 +757,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     }
 
     await _runAuthAction(() async {
-      await ref
+      final result = await ref
           .read(authControllerProvider)
           .signUp(
             email: email,
@@ -714,7 +766,55 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             termsVersion: LegalDocuments.terms.version,
             privacyVersion: LegalDocuments.privacy.version,
           );
+      if (!mounted) return;
+      if (result == SignUpResult.needsEmailConfirmation) {
+        setState(() {
+          _pendingSignupEmail = email;
+          _code.clear();
+          _error = null;
+          _info = null;
+          _mode = AuthEntryMode.verifySignupEmail;
+        });
+        return;
+      }
+      context.go('/home');
+    });
+  }
+
+  Future<void> _verifySignupEmailCode() async {
+    final email = _pendingSignupEmail ?? _email.text.trim();
+    final code = _code.text.trim();
+    if (!_isValidEmail(email)) {
+      _setError(
+        'Не удалось определить email регистрации. Создайте аккаунт ещё раз.',
+      );
+      return;
+    }
+    if (code.length != 6) {
+      _setError('Введите 6 цифр из письма');
+      return;
+    }
+    await _runAuthAction(() async {
+      await ref
+          .read(authControllerProvider)
+          .verifySignupEmailCode(email: email, code: code);
       if (mounted) context.go('/home');
+    });
+  }
+
+  Future<void> _resendSignupEmailCode() async {
+    final email = _pendingSignupEmail ?? _email.text.trim();
+    if (!_isValidEmail(email)) return;
+    await _runAuthAction(() async {
+      await ref
+          .read(authControllerProvider)
+          .resendSignupConfirmationCode(email: email);
+      if (!mounted) return;
+      setState(() {
+        _code.clear();
+        _error = null;
+        _info = 'Новый код отправлен на $email';
+      });
     });
   }
 
