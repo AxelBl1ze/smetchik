@@ -29,7 +29,7 @@ Deno.serve(async (request) => {
     const action = firstString(body.action);
     switch (action) {
       case 'create':
-        return json(await createTicket(request, body));
+        return json(await createTicket(body));
       case 'thread':
         return json(await loadThread(body));
       case 'reply':
@@ -52,7 +52,7 @@ Deno.serve(async (request) => {
   }
 });
 
-async function createTicket(request: Request, body: JsonRecord): Promise<JsonRecord> {
+async function createTicket(body: JsonRecord): Promise<JsonRecord> {
   const email = requiredEmail(body.email);
   const subject = requiredText(body.subject, 'Укажите тему обращения.', 3, 120);
   const message = requiredText(body.message, 'Опишите вопрос.', 1, 4000);
@@ -88,9 +88,7 @@ async function createTicket(request: Request, body: JsonRecord): Promise<JsonRec
   });
   if (inserted.error) throw inserted.error;
 
-  const publicUrl = publicThreadUrl(request, publicToken);
-  const emailSent = await sendThreadLink({ email, subject, publicUrl });
-  return { token: publicToken, emailSent };
+  return { token: publicToken };
 }
 
 async function loadThread(body: JsonRecord): Promise<JsonRecord> {
@@ -157,59 +155,6 @@ function adminClient() {
   return createClient(url, serviceRole, { auth: { persistSession: false } });
 }
 
-function publicThreadUrl(request: Request, token: string) {
-  const configured = Deno.env.get('PUBLIC_APP_URL')?.trim();
-  const origin = configured || request.headers.get('origin')?.trim() || 'https://smetchik.pages.dev';
-  return `${origin.replace(/\/$/, '')}/#/help/${token}`;
-}
-
-async function sendThreadLink(input: {
-  email: string;
-  subject: string;
-  publicUrl: string;
-}): Promise<boolean> {
-  const apiKey = Deno.env.get('UNISENDER_API_KEY')?.trim();
-  const senderEmail = Deno.env.get('UNISENDER_SENDER_EMAIL')?.trim();
-  const senderName = Deno.env.get('UNISENDER_SENDER_NAME')?.trim() || 'Сметчик';
-  if (!apiKey || !senderEmail) return false;
-
-  try {
-    const form = new URLSearchParams({
-      api_key: apiKey,
-      email: input.email,
-      sender_name: senderName,
-      sender_email: senderEmail,
-      subject: `Сметчик: ваше обращение «${input.subject}»`,
-      body: `
-        <div style="font-family:Arial,sans-serif;color:#1A1A1A;line-height:1.5">
-          <h2 style="margin:0 0 12px">Ваше обращение принято</h2>
-          <p>Мы ответим в личной переписке. Сохраните эту ссылку:</p>
-          <p><a href="${input.publicUrl}" style="color:#C96500;font-weight:700">Открыть обращение в Сметчике</a></p>
-          <p style="color:#5F5E5A;font-size:13px">Ссылка не требует входа в аккаунт. Не пересылайте её другим людям.</p>
-        </div>
-      `.trim(),
-      lang: 'ru',
-    });
-    const response = await fetch('https://api.unisender.com/ru/api/sendEmail?format=json', {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: form,
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || (isRecord(result) && typeof result.error === 'string')) {
-      console.error('Unable to send public support link', result);
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.error('Unable to send public support link', error);
-    return false;
-  }
-}
-
 async function readJsonBody(request: Request): Promise<JsonRecord> {
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -220,10 +165,6 @@ async function readJsonBody(request: Request): Promise<JsonRecord> {
 
 function firstString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function requiredEmail(value: unknown) {

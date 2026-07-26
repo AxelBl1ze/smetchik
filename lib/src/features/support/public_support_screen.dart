@@ -11,10 +11,10 @@ import '../../shared/ui.dart';
 /// A public support thread used when the person cannot sign in, for example
 /// after an account block. Access is limited to an unguessable link token.
 class PublicSupportScreen extends StatefulWidget {
-  const PublicSupportScreen({super.key, this.token, this.emailSent});
+  const PublicSupportScreen({super.key, this.token, this.created = false});
 
   final String? token;
-  final bool? emailSent;
+  final bool created;
 
   @override
   State<PublicSupportScreen> createState() => _PublicSupportScreenState();
@@ -93,9 +93,8 @@ class _PublicSupportScreenState extends State<PublicSupportScreen> {
         'message': message,
       });
       final token = data['token'] as String?;
-      final emailSent = data['emailSent'] == true;
       if (!mounted || token == null || token.isEmpty) return;
-      context.go('/help/$token?emailSent=${emailSent ? '1' : '0'}');
+      context.go('/help/$token?created=1');
     } catch (error) {
       if (mounted) setState(() => _error = appErrorMessage(error));
     } finally {
@@ -190,11 +189,8 @@ class _PublicSupportScreenState extends State<PublicSupportScreen> {
           else ...[
             _PublicThreadHeader(ticket: _ticket ?? const {}),
             const SizedBox(height: 14),
-            if (widget.emailSent != null) ...[
-              _PublicDeliveryNote(
-                emailSent: widget.emailSent!,
-                onCopy: _copyThreadLink,
-              ),
+            if (widget.created) ...[
+              _PublicDeliveryNote(onCopy: _copyThreadLink),
               const SizedBox(height: 14),
             ],
             SmetchikCard(
@@ -534,42 +530,34 @@ class _PublicResolvedNote extends StatelessWidget {
 }
 
 class _PublicDeliveryNote extends StatelessWidget {
-  const _PublicDeliveryNote({required this.emailSent, required this.onCopy});
+  const _PublicDeliveryNote({required this.onCopy});
 
-  final bool emailSent;
   final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
-    final color = emailSent ? AppColors.success : AppColors.orangeDark;
-    final background = emailSent ? AppColors.successBg : AppColors.orangeLight;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: background,
+        color: AppColors.orangeLight,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            emailSent ? Icons.mark_email_read_outlined : Icons.link_outlined,
-            color: color,
-          ),
+          Icon(Icons.link_outlined, color: AppColors.orangeDark),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              emailSent
-                  ? 'Ссылка на эту переписку отправлена на email. По ней можно вернуться к обращению без входа.'
-                  : 'Ссылка не ушла на email. Скопируйте её сейчас: только она даст вернуться к этой переписке без входа.',
-              style: TextStyle(color: color, height: 1.3),
+              'Сохраните ссылку на эту переписку. По ней можно вернуться к обращению без входа.',
+              style: const TextStyle(color: AppColors.orangeDark, height: 1.3),
             ),
           ),
           const SizedBox(width: 8),
           IconButton(
             tooltip: 'Скопировать ссылку',
             onPressed: onCopy,
-            icon: Icon(Icons.copy_outlined, color: color),
+            icon: const Icon(Icons.copy_outlined, color: AppColors.orangeDark),
           ),
         ],
       ),

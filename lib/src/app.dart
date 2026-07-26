@@ -114,11 +114,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           state,
           PublicSupportScreen(
             token: state.pathParameters['token'],
-            emailSent: switch (state.uri.queryParameters['emailSent']) {
-              '1' => true,
-              '0' => false,
-              _ => null,
-            },
+            created: state.uri.queryParameters['created'] == '1',
           ),
         ),
       ),
