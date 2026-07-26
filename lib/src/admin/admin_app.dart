@@ -2793,20 +2793,6 @@ class _SupportConversation extends StatelessWidget {
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                tooltip: 'Статус обращения',
-                onSelected: onStatus,
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'open', child: Text('Новое')),
-                  PopupMenuItem(value: 'in_progress', child: Text('В работе')),
-                  PopupMenuItem(
-                    value: 'waiting_user',
-                    child: Text('Ждём ответ'),
-                  ),
-                  PopupMenuItem(value: 'resolved', child: Text('Закрыть')),
-                ],
-                child: _AdminSupportStatusPill(status: status),
-              ),
               const SizedBox(width: 6),
               IconButton.outlined(
                 tooltip: 'Обновить сообщения',
@@ -2815,6 +2801,8 @@ class _SupportConversation extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          _SupportStatusPicker(current: status, onSelected: onStatus),
           const SizedBox(height: 14),
           if (loading)
             const Padding(
@@ -2973,6 +2961,111 @@ class _AdminSupportStatusPill extends StatelessWidget {
           color: style.$1,
           fontSize: 11,
           fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+}
+
+class _SupportStatusPicker extends StatelessWidget {
+  const _SupportStatusPicker({required this.current, required this.onSelected});
+
+  final String current;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    const statuses = [
+      ('open', 'Новое', Icons.fiber_new_outlined),
+      ('in_progress', 'В работе', Icons.pending_actions_outlined),
+      ('waiting_user', 'Ждём ответ', Icons.mark_email_unread_outlined),
+      ('resolved', 'Закрыто', Icons.task_alt_outlined),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Статус обращения',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: [
+            for (final item in statuses)
+              _SupportStatusAction(
+                status: item.$1,
+                label: item.$2,
+                icon: item.$3,
+                selected: current == item.$1,
+                onTap: () => onSelected(item.$1),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SupportStatusAction extends StatelessWidget {
+  const _SupportStatusAction({
+    required this.status,
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String status;
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = switch (status) {
+      'in_progress' => (AppColors.info, AppColors.infoBg),
+      'waiting_user' => (AppColors.orangeDark, AppColors.orangeLight),
+      'resolved' => (AppColors.success, AppColors.successBg),
+      _ => (AppColors.orangeDark, AppColors.orangeLight),
+    };
+    return Material(
+      color: selected ? style.$2 : Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: selected ? null : onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: selected ? style.$1 : AppColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: selected ? style.$1 : AppColors.textHint,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? style.$1 : AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

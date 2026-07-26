@@ -23,6 +23,7 @@ import 'features/projects/project_detail_screen.dart';
 import 'features/projects/project_form_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/support/support_screen.dart';
+import 'features/support/public_support_screen.dart';
 import 'shared/app_shell.dart';
 import 'shared/keyboard_dismiss_on_tap.dart';
 
@@ -37,13 +38,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAuthPath = path == '/auth' || path == '/auth/reset';
       final isLegalPath = path == '/legal' || path.startsWith('/legal/');
       final isApprovalPath = path.startsWith('/approve/');
+      final isPublicSupportPath = path == '/help' || path.startsWith('/help/');
 
       if (!AppConfig.hasSupabaseConfig) {
         return path == '/config' ? null : '/config';
       }
 
       if (!auth.isLoggedIn) {
-        return isAuthPath || isLegalPath || isApprovalPath ? null : '/auth';
+        return isAuthPath ||
+                isLegalPath ||
+                isApprovalPath ||
+                isPublicSupportPath
+            ? null
+            : '/auth';
       }
 
       if (auth.isPasswordRecovery && path != '/auth/reset') {
@@ -94,6 +101,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _page(
           state,
           ClientApprovalScreen(token: state.pathParameters['token']!),
+        ),
+      ),
+      GoRoute(
+        path: '/help',
+        pageBuilder: (context, state) =>
+            _page(state, const PublicSupportScreen()),
+      ),
+      GoRoute(
+        path: '/help/:token',
+        pageBuilder: (context, state) => _page(
+          state,
+          PublicSupportScreen(token: state.pathParameters['token']),
         ),
       ),
       ShellRoute(

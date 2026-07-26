@@ -24,6 +24,7 @@ AppErrorInfo describeAppError(Object error) {
       .replaceFirst('FunctionException(', '')
       .replaceAll(RegExp(r'\)$'), '')
       .trim();
+  final displayMessage = _extractServerMessage(raw);
   final value = raw.toLowerCase();
 
   if (value.contains('user is banned') || value.contains('banned_until')) {
@@ -91,14 +92,14 @@ AppErrorInfo describeAppError(Object error) {
   if (value.contains('лимит') || value.contains('тариф')) {
     return AppErrorInfo(
       title: 'Достигнут лимит тарифа',
-      message: _cleanMessage(raw),
+      message: _cleanMessage(displayMessage),
       actionLabel: 'Тарифы',
     );
   }
   if (_containsRussian(raw)) {
     return AppErrorInfo(
       title: 'Не удалось выполнить действие',
-      message: _cleanMessage(raw),
+      message: _cleanMessage(displayMessage),
       actionLabel: 'Поддержка',
     );
   }
@@ -167,4 +168,17 @@ String _cleanMessage(String value) {
   return normalized.length > 220
       ? '${normalized.substring(0, 217).trimRight()}...'
       : normalized;
+}
+
+String _extractServerMessage(String value) {
+  final match = RegExp(
+    r'''(?:["']error["']|message)\s*[:=]\s*["']?([^,}\n]+)''',
+    caseSensitive: false,
+  ).firstMatch(value);
+  final extracted = match?.group(1)?.trim();
+  if (extracted == null || extracted.isEmpty) return value;
+  return extracted
+      .replaceAll(RegExp(r'''["']+$'''), '')
+      .replaceAll(RegExp(r'\)+$'), '')
+      .trim();
 }

@@ -120,6 +120,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               child: _buildModeBody(auth),
             ),
           ),
+          const SizedBox(height: 6),
+          TextButton.icon(
+            onPressed: () => context.push('/help'),
+            icon: const Icon(Icons.support_agent_outlined),
+            label: const Text('Написать в поддержку'),
+          ),
         ],
       ),
     );

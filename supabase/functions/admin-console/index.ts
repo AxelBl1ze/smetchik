@@ -615,12 +615,18 @@ async function supportTickets(
   const status = firstString(body.status) ?? 'all';
   const response = await context.admin
     .from('support_tickets')
-    .select('id,user_id,subject,status,context,last_message_preview,last_message_at,created_at,updated_at')
+    .select('id,user_id,contact_email,subject,status,context,last_message_preview,last_message_at,created_at,updated_at')
     .order('updated_at', { ascending: false })
     .limit(200);
   if (response.error) throw response.error;
   const rows = response.data ?? [];
-  const userIds = [...new Set(rows.map((ticket) => ticket.user_id))];
+  const userIds = [
+    ...new Set(
+      rows
+        .map((ticket) => ticket.user_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    ),
+  ];
   const profiles = userIds.length
     ? await context.admin
       .from('profiles')
@@ -637,7 +643,7 @@ async function supportTickets(
       const profile = profileById.get(ticket.user_id);
       return {
         ...ticket,
-        userName: profile?.full_name ?? 'Пользователь',
+        userName: profile?.full_name ?? ticket.contact_email ?? 'Пользователь',
         userPhone: profile?.phone ?? null,
       };
     })
@@ -662,7 +668,7 @@ async function supportMessages(
   const ticketId = requiredUuid(body.ticketId, 'обращение');
   const ticket = await context.admin
     .from('support_tickets')
-    .select('id,user_id,subject,status,created_at,updated_at')
+    .select('id,user_id,contact_email,subject,status,created_at,updated_at')
     .eq('id', ticketId)
     .maybeSingle();
   if (ticket.error) throw ticket.error;
@@ -671,7 +677,8 @@ async function supportMessages(
     .from('support_messages')
     .select('id,ticket_id,author_user_id,author_role,body,created_at')
     .eq('ticket_id', ticketId)
-    .order('created_at');
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
   if (response.error) throw response.error;
   const authorIds = [...new Set(
     (response.data ?? [])
@@ -687,7 +694,10 @@ async function supportMessages(
   if (profiles.error) throw profiles.error;
   const names = new Map((profiles.data ?? []).map((profile) => [profile.id, profile.full_name]));
   return {
-    ticket: ticket.data,
+    ticket: {
+      ...ticket.data,
+      userName: firstString(ticket.data.contact_email) ?? 'Пользователь',
+    },
     messages: (response.data ?? []).map((message) => ({
       ...message,
       authorName: names.get(message.author_user_id) ??

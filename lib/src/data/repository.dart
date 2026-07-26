@@ -1168,7 +1168,8 @@ class SmetchikRepository {
         .from('support_messages')
         .select('id,ticket_id,author_role,body,created_at')
         .eq('ticket_id', ticketId)
-        .order('created_at');
+        .order('created_at', ascending: true)
+        .order('id', ascending: true);
     return _asMaps(rows).map(SupportMessageModel.fromMap).toList();
   }
 
