@@ -539,7 +539,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       await ref.read(repositoryProvider).deleteProject(project.id);
       ref.invalidate(projectsProvider);
       if (!mounted) return;
-      context.go('/estimates');
+      context.go('/estimates?tab=projects');
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(

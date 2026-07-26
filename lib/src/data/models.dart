@@ -1149,6 +1149,8 @@ class EstimateModel {
     this.revisionOf,
     this.pdfStoragePath,
     this.signedPdfStoragePath,
+    this.completionActStoragePath,
+    this.completionActGeneratedAt,
     this.clientSignaturePath,
     this.clientSignatureUrl,
     this.clientSignedAt,
@@ -1175,6 +1177,8 @@ class EstimateModel {
   final String? revisionOf;
   final String? pdfStoragePath;
   final String? signedPdfStoragePath;
+  final String? completionActStoragePath;
+  final DateTime? completionActGeneratedAt;
   final String? clientSignaturePath;
   final String? clientSignatureUrl;
   final DateTime? clientSignedAt;
@@ -1207,6 +1211,10 @@ class EstimateModel {
       revisionOf: map['revision_of'] as String?,
       pdfStoragePath: map['pdf_storage_path'] as String?,
       signedPdfStoragePath: map['signed_pdf_storage_path'] as String?,
+      completionActStoragePath: map['completion_act_storage_path'] as String?,
+      completionActGeneratedAt: asDateOrNull(
+        map['completion_act_generated_at'],
+      ),
       clientSignaturePath: map['client_signature_path'] as String?,
       clientSignatureUrl: map['client_signature_url'] as String?,
       clientSignedAt: asDateOrNull(map['client_signed_at']),
@@ -1237,6 +1245,8 @@ class EstimateModel {
     String? revisionOf,
     String? pdfStoragePath,
     String? signedPdfStoragePath,
+    String? completionActStoragePath,
+    DateTime? completionActGeneratedAt,
     String? clientSignaturePath,
     String? clientSignatureUrl,
     DateTime? clientSignedAt,
@@ -1263,6 +1273,10 @@ class EstimateModel {
       revisionOf: revisionOf ?? this.revisionOf,
       pdfStoragePath: pdfStoragePath ?? this.pdfStoragePath,
       signedPdfStoragePath: signedPdfStoragePath ?? this.signedPdfStoragePath,
+      completionActStoragePath:
+          completionActStoragePath ?? this.completionActStoragePath,
+      completionActGeneratedAt:
+          completionActGeneratedAt ?? this.completionActGeneratedAt,
       clientSignaturePath: clientSignaturePath ?? this.clientSignaturePath,
       clientSignatureUrl: clientSignatureUrl ?? this.clientSignatureUrl,
       clientSignedAt: clientSignedAt ?? this.clientSignedAt,

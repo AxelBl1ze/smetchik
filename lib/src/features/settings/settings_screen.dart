@@ -168,6 +168,65 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            SmetchikCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _CardTitle(
+                    icon: Icons.workspace_premium_outlined,
+                    title: 'Тариф и бригада',
+                    subtitle: 'Подписка, промокод и мастера в одной карточке',
+                  ),
+                  const SizedBox(height: 14),
+                  estimates.when(
+                    data: (items) => _SubscriptionCard(
+                      profile: value,
+                      estimates: items,
+                      busy: _saving,
+                      framed: false,
+                      onTap: () => _showTariffSheet(value),
+                      onRedeem: _showPromoCodeSheet,
+                    ),
+                    loading: () => _SubscriptionCard(
+                      profile: value,
+                      estimates: const [],
+                      busy: true,
+                      framed: false,
+                      onTap: () => _showTariffSheet(value),
+                      onRedeem: _showPromoCodeSheet,
+                    ),
+                    error: (_, _) => _SubscriptionCard(
+                      profile: value,
+                      estimates: const [],
+                      busy: _saving,
+                      framed: false,
+                      onTap: () => _showTariffSheet(value),
+                      onRedeem: _showPromoCodeSheet,
+                    ),
+                  ),
+                  _TeamSubscriptionCard(
+                    profile: value,
+                    workspace: ref.watch(teamWorkspaceProvider),
+                    members: ref.watch(teamMembersProvider),
+                    invites: ref.watch(teamInvitesProvider),
+                    busy: _saving,
+                    framed: false,
+                    onOpenPlans: () => _showTariffSheet(value),
+                    onCreate: _createTeam,
+                    onInvite: _inviteTeamMember,
+                    onRemove: _removeTeamMember,
+                    onCancelInvite: _cancelTeamInvite,
+                  ),
+                  _IncomingTeamInvitesCard(
+                    invites: ref.watch(incomingTeamInvitesProvider),
+                    busy: _saving,
+                    framed: false,
+                    onAccept: _acceptTeamInvite,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
             _SignatureSettingsCard(
               signatureUrl:
                   value?.signatureUrl ??
@@ -214,48 +273,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               error: (_, _) => const SizedBox.shrink(),
             ),
             const SizedBox(height: 14),
-            estimates.when(
-              data: (items) => _SubscriptionCard(
-                profile: value,
-                estimates: items,
-                busy: _saving,
-                onTap: () => _showTariffSheet(value),
-                onRedeem: _showPromoCodeSheet,
-              ),
-              loading: () => _SubscriptionCard(
-                profile: value,
-                estimates: const [],
-                busy: true,
-                onTap: () => _showTariffSheet(value),
-                onRedeem: _showPromoCodeSheet,
-              ),
-              error: (_, _) => _SubscriptionCard(
-                profile: value,
-                estimates: const [],
-                busy: _saving,
-                onTap: () => _showTariffSheet(value),
-                onRedeem: _showPromoCodeSheet,
-              ),
-            ),
-            const SizedBox(height: 14),
-            _TeamSubscriptionCard(
-              profile: value,
-              workspace: ref.watch(teamWorkspaceProvider),
-              members: ref.watch(teamMembersProvider),
-              invites: ref.watch(teamInvitesProvider),
-              busy: _saving,
-              onOpenPlans: () => _showTariffSheet(value),
-              onCreate: _createTeam,
-              onInvite: _inviteTeamMember,
-              onRemove: _removeTeamMember,
-              onCancelInvite: _cancelTeamInvite,
-            ),
-            _IncomingTeamInvitesCard(
-              invites: ref.watch(incomingTeamInvitesProvider),
-              busy: _saving,
-              onAccept: _acceptTeamInvite,
-            ),
-            const SizedBox(height: 14),
             _PdfSettingsLauncherCard(
               profile: value,
               template: _pdfTemplate,
@@ -263,7 +280,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onOpen: () => _showPdfSettingsSheet(value),
               onUpgrade: () => _showTariffSheet(value),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
+            _SupportLauncherCard(onTap: () => context.push('/support')),
+            const SizedBox(height: 14),
+            _LegalDocumentsCard(onTap: () => context.push('/legal')),
+            const SizedBox(height: 18),
             LayoutBuilder(
               builder: (context, constraints) {
                 final stacked =
@@ -310,9 +331,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               },
             ),
             const SizedBox(height: 18),
-            _SupportLauncherCard(onTap: () => context.push('/support')),
-            const SizedBox(height: 14),
-            _LegalDocumentsCard(onTap: () => context.push('/legal')),
           ],
         ),
         loading: () => const LoadingPane(),
@@ -3842,6 +3860,7 @@ class _SubscriptionCard extends StatelessWidget {
     required this.profile,
     required this.estimates,
     required this.busy,
+    this.framed = true,
     required this.onTap,
     required this.onRedeem,
   });
@@ -3849,6 +3868,7 @@ class _SubscriptionCard extends StatelessWidget {
   final ProfileModel? profile;
   final List<EstimateModel> estimates;
   final bool busy;
+  final bool framed;
   final VoidCallback onTap;
   final VoidCallback onRedeem;
 
@@ -3868,99 +3888,96 @@ class _SubscriptionCard extends StatelessWidget {
     final remaining = profile?.remainingMonthlyEstimates(createdThisMonth);
     final renewsAt = profile?.subscriptionRenewsAt;
 
-    return SmetchikCard(
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: isPaid ? AppColors.graphite : AppColors.orangeLight,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(
-              isPaid
-                  ? Icons.workspace_premium
-                  : Icons.workspace_premium_outlined,
-              color: isPaid ? AppColors.orange : AppColors.orangeDark,
-            ),
+    final content = Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: isPaid ? AppColors.graphite : AppColors.orangeLight,
+            borderRadius: BorderRadius.circular(14),
           ),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 390),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Тариф ${SubscriptionPlan.label(displayPlan)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _subscriptionSummary(
-                    profile: profile,
-                    createdThisMonth: createdThisMonth,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+          child: Icon(
+            isPaid ? Icons.workspace_premium : Icons.workspace_premium_outlined,
+            color: isPaid ? AppColors.orange : AppColors.orangeDark,
           ),
-          if (!hasActivePro && limit != null)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 260),
-              child: _LimitMeter(
-                value: createdThisMonth,
-                limit: limit,
-                remaining: remaining ?? 0,
+        ),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 390),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Тариф ${SubscriptionPlan.label(displayPlan)}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
+              const SizedBox(height: 2),
+              Text(
+                _subscriptionSummary(
+                  profile: profile,
+                  createdThisMonth: createdThisMonth,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (!hasActivePro && limit != null)
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 260),
+            child: _LimitMeter(
+              value: createdThisMonth,
+              limit: limit,
+              remaining: remaining ?? 0,
             ),
-          if (hasActivePro && renewsAt != null)
-            _SubscriptionChip(
-              icon: Icons.event_available_outlined,
-              label: 'до ${formatDate(renewsAt)}',
-            ),
-          if (expiredPro)
-            const _SubscriptionChip(
-              icon: Icons.schedule_outlined,
-              label: 'Профи истёк',
-            ),
+          ),
+        if (hasActivePro && renewsAt != null)
           _SubscriptionChip(
-            icon: Icons.account_balance_wallet_outlined,
-            label: SubscriptionSource.label(
-              profile?.subscriptionSource ?? SubscriptionSource.manual,
-            ),
+            icon: Icons.event_available_outlined,
+            label: 'до ${formatDate(renewsAt)}',
           ),
-          OutlinedButton.icon(
-            onPressed: busy ? null : onTap,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 42),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-            ),
-            icon: const Icon(Icons.tune),
-            label: const Text('Тарифы'),
+        if (expiredPro)
+          const _SubscriptionChip(
+            icon: Icons.schedule_outlined,
+            label: 'Профи истёк',
           ),
-          TextButton.icon(
-            onPressed: busy ? null : onRedeem,
-            icon: const Icon(Icons.confirmation_number_outlined, size: 18),
-            label: const Text('Промокод'),
+        _SubscriptionChip(
+          icon: Icons.account_balance_wallet_outlined,
+          label: SubscriptionSource.label(
+            profile?.subscriptionSource ?? SubscriptionSource.manual,
           ),
-        ],
-      ),
+        ),
+        OutlinedButton.icon(
+          onPressed: busy ? null : onTap,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 42),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
+          icon: const Icon(Icons.tune),
+          label: const Text('Тарифы'),
+        ),
+        TextButton.icon(
+          onPressed: busy ? null : onRedeem,
+          icon: const Icon(Icons.confirmation_number_outlined, size: 18),
+          label: const Text('Промокод'),
+        ),
+      ],
     );
+    return framed ? SmetchikCard(child: content) : content;
   }
 }
 
@@ -4841,6 +4858,7 @@ class _TeamSubscriptionCard extends StatelessWidget {
     required this.members,
     required this.invites,
     required this.busy,
+    this.framed = true,
     required this.onOpenPlans,
     required this.onCreate,
     required this.onInvite,
@@ -4853,6 +4871,7 @@ class _TeamSubscriptionCard extends StatelessWidget {
   final AsyncValue<List<TeamMemberModel>> members;
   final AsyncValue<List<TeamInviteModel>> invites;
   final bool busy;
+  final bool framed;
   final VoidCallback onOpenPlans;
   final VoidCallback onCreate;
   final VoidCallback onInvite;
@@ -4868,15 +4887,17 @@ class _TeamSubscriptionCard extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    Widget frame(Widget child) => framed ? SmetchikCard(child: child) : child;
+
     return workspace.when(
-      loading: () => const SmetchikCard(
-        child: SizedBox(
+      loading: () => frame(
+        const SizedBox(
           height: 64,
           child: Center(child: CircularProgressIndicator()),
         ),
       ),
-      error: (_, _) => SmetchikCard(
-        child: Row(
+      error: (_, _) => frame(
+        Row(
           children: [
             const Icon(Icons.groups_2_outlined, color: AppColors.orangeDark),
             const SizedBox(width: 12),
@@ -4889,8 +4910,8 @@ class _TeamSubscriptionCard extends StatelessWidget {
       ),
       data: (team) {
         if (team == null) {
-          return SmetchikCard(
-            child: Column(
+          return frame(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const _CardTitle(
@@ -4918,8 +4939,8 @@ class _TeamSubscriptionCard extends StatelessWidget {
         }
         final people = members.asData?.value ?? const <TeamMemberModel>[];
         final pending = invites.asData?.value ?? const <TeamInviteModel>[];
-        return SmetchikCard(
-          child: Column(
+        return frame(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _CardTitle(
@@ -5128,10 +5149,12 @@ class _IncomingTeamInvitesCard extends StatelessWidget {
   const _IncomingTeamInvitesCard({
     required this.invites,
     required this.busy,
+    this.framed = true,
     required this.onAccept,
   });
   final AsyncValue<List<IncomingTeamInviteModel>> invites;
   final bool busy;
+  final bool framed;
   final ValueChanged<String> onAccept;
 
   @override
@@ -5140,63 +5163,60 @@ class _IncomingTeamInvitesCard extends StatelessWidget {
     error: (_, _) => const SizedBox.shrink(),
     data: (items) {
       if (items.isEmpty) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.only(top: 14),
-        child: SmetchikCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _CardTitle(
-                icon: Icons.mark_email_unread_outlined,
-                title: 'Приглашение в бригаду',
-                subtitle: 'Владелец оплатит тариф за вашу учётную запись',
-              ),
-              const SizedBox(height: 12),
-              for (final invite in items) ...[
-                Container(
-                  padding: const EdgeInsets.all(11),
-                  decoration: BoxDecoration(
-                    color: AppColors.orangeLight,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.groups_2_outlined,
-                        color: AppColors.orangeDark,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              invite.teamName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            Text(
-                              'Пригласил: ${invite.ownerName}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: busy ? null : () => onAccept(invite.id),
-                        child: const Text('Принять'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ],
+      final content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _CardTitle(
+            icon: Icons.mark_email_unread_outlined,
+            title: 'Приглашение в бригаду',
+            subtitle: 'Владелец оплатит тариф за вашу учётную запись',
           ),
-        ),
+          const SizedBox(height: 12),
+          for (final invite in items) ...[
+            Container(
+              padding: const EdgeInsets.all(11),
+              decoration: BoxDecoration(
+                color: AppColors.orangeLight,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.groups_2_outlined,
+                    color: AppColors.orangeDark,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          invite.teamName,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        Text(
+                          'Пригласил: ${invite.ownerName}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: busy ? null : () => onAccept(invite.id),
+                    child: const Text('Принять'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      );
+      return Padding(
+        padding: EdgeInsets.only(top: framed ? 14 : 16),
+        child: framed ? SmetchikCard(child: content) : content,
       );
     },
   );

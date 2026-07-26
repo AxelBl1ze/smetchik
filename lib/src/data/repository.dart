@@ -1497,6 +1497,43 @@ class SmetchikRepository {
     return _client.storage.from('signed-estimate-pdfs').download(path);
   }
 
+  Future<String> storeCompletionActPdf({
+    required String estimateId,
+    required int documentVersion,
+    required Uint8List bytes,
+  }) async {
+    final version = DateTime.now().millisecondsSinceEpoch;
+    final path =
+        '$_userId/$estimateId/v$documentVersion-$version-completion-act.pdf';
+    await _client.storage
+        .from('signed-estimate-pdfs')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(contentType: 'application/pdf'),
+        );
+    final generatedAt = DateTime.now().toUtc().toIso8601String();
+    final updated = await _client
+        .from('estimates')
+        .update({
+          'completion_act_storage_path': path,
+          'completion_act_generated_at': generatedAt,
+        })
+        .eq('id', estimateId)
+        .eq('user_id', _userId)
+        .isFilter('completion_act_storage_path', null)
+        .select('completion_act_storage_path')
+        .maybeSingle();
+    if (updated == null) {
+      return path;
+    }
+    return (updated['completion_act_storage_path'] as String?) ?? path;
+  }
+
+  Future<Uint8List> downloadCompletionActPdf(String path) {
+    return _client.storage.from('signed-estimate-pdfs').download(path);
+  }
+
   Future<EstimateApprovalLink> createEstimateApprovalLink({
     required String estimateId,
   }) async {

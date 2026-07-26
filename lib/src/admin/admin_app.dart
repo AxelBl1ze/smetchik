@@ -2238,6 +2238,17 @@ class _SignedEstimateCard extends StatelessWidget {
                 '${formatMoney(_asDouble(estimate['total_amount']))} · подписано ${signedAt == null ? '—' : formatDateTime(signedAt)}',
                 style: const TextStyle(color: AppColors.textHint, fontSize: 12),
               ),
+              if (_date(estimate['completion_act_generated_at']) != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Акт сформирован ${formatDateTime(_date(estimate['completion_act_generated_at'])!)}',
+                  style: const TextStyle(
+                    color: AppColors.success,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ],
           );
           final action = OutlinedButton.icon(
@@ -2303,6 +2314,14 @@ class _EvidenceDialog extends StatelessWidget {
       ('Версия', '#${_fallback(estimate['document_version'], '1')}'),
       if (_fallback(files['signedPdfUrl'], '').isNotEmpty)
         ('PDF', 'ссылка включена в экспорт'),
+      if (_fallback(files['completionActUrl'], '').isNotEmpty)
+        (
+          'Акт выполненных работ',
+          _date((data['estimate'] as Map)['completion_act_generated_at']) ==
+                  null
+              ? 'ссылка включена в экспорт'
+              : 'создан ${formatDateTime(_date((data['estimate'] as Map)['completion_act_generated_at'])!)}',
+        ),
     ];
     return Dialog(
       backgroundColor: Colors.transparent,

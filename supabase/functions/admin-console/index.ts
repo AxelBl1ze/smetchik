@@ -496,7 +496,7 @@ async function signedEstimates(
   const response = await context.admin
     .from('estimates')
     .select(
-      'id,user_id,object_title,estimate_date,total_amount,status,document_version,client_signed_at,client_signed_name,client_signed_phone,client_signature_method,signed_document_hash,signed_pdf_storage_path,clients(name,phone)',
+      'id,user_id,object_title,estimate_date,total_amount,status,document_version,client_signed_at,client_signed_name,client_signed_phone,client_signature_method,signed_document_hash,signed_pdf_storage_path,completion_act_storage_path,completion_act_generated_at,clients(name,phone)',
     )
     .not('client_signed_at', 'is', null)
     .order('client_signed_at', { ascending: false })
@@ -772,12 +772,19 @@ function requiredSupportMessage(value: unknown): string {
 async function signedEvidenceFiles(admin: ReturnType<typeof createClient>, estimate: JsonRecord) {
   const files: JsonRecord = {};
   const signedPdf = firstString(estimate.signed_pdf_storage_path);
+  const completionAct = firstString(estimate.completion_act_storage_path);
   const signature = firstString(estimate.client_signature_path);
   if (signedPdf) {
     const response = await admin.storage
       .from('signed-estimate-pdfs')
       .createSignedUrl(signedPdf, 15 * 60);
     if (!response.error) files.signedPdfUrl = response.data.signedUrl;
+  }
+  if (completionAct) {
+    const response = await admin.storage
+      .from('signed-estimate-pdfs')
+      .createSignedUrl(completionAct, 15 * 60);
+    if (!response.error) files.completionActUrl = response.data.signedUrl;
   }
   if (signature) {
     const response = await admin.storage

@@ -357,10 +357,25 @@ class _EstimateDetailScreenState extends ConsumerState<EstimateDetailScreen> {
   ) async {
     setState(() => _pdfActionBusy = true);
     try {
-      final bytes = await PdfService.buildCompletionActPdf(
-        detail: detail,
-        profile: profile,
-      );
+      final storedPath = detail.estimate.completionActStoragePath;
+      final bytes = storedPath == null || storedPath.isEmpty
+          ? await PdfService.buildCompletionActPdf(
+              detail: detail,
+              profile: profile,
+            )
+          : await ref
+                .read(repositoryProvider)
+                .downloadCompletionActPdf(storedPath);
+      if (storedPath == null || storedPath.isEmpty) {
+        await ref
+            .read(repositoryProvider)
+            .storeCompletionActPdf(
+              estimateId: detail.estimate.id,
+              documentVersion: detail.estimate.documentVersion,
+              bytes: bytes,
+            );
+        ref.invalidate(estimateDetailProvider(detail.estimate.id));
+      }
       final filename = 'akt-${detail.estimate.id.substring(0, 8)}.pdf';
       await SharePlus.instance.share(
         ShareParams(

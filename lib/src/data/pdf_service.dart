@@ -260,6 +260,7 @@ class PdfService {
       _loadProfileImage(profile?.logoUrl),
       _loadProfileImage(profile?.signatureUrl),
       _loadProfileImage(detail.estimate.clientSignatureUrl),
+      _loadProfileImage(profile?.contactQrUrl),
     ]);
     final estimate = detail.estimate;
     final render = _PdfRenderOptions.fromProfile(
@@ -267,6 +268,7 @@ class PdfService {
       logoImage: images[0],
       signatureImage: images[1],
       clientSignatureImage: images[2],
+      contactQrImage: images[3],
     ).formalDocument();
 
     doc.addPage(
@@ -301,6 +303,12 @@ class PdfService {
             'Подтверждение сторон',
             'Заказчик подтверждает, что работы приняты в полном объёме. Претензии по объёму и качеству на дату подписания отсутствуют.',
           ),
+          if (render.contactQrImage != null) ...[
+            pw.SizedBox(height: 18),
+            _sectionTitle(render, 'Связаться с исполнителем'),
+            pw.SizedBox(height: 8),
+            _qrBlocks(render),
+          ],
           pw.SizedBox(height: 30),
           _signatures(render, estimate),
         ],
@@ -1418,7 +1426,7 @@ class _PdfRenderOptions {
       signatureImage: signatureImage,
       clientSignatureImage: clientSignatureImage,
       paymentQrImage: null,
-      contactQrImage: null,
+      contactQrImage: contactQrImage,
     );
   }
 
