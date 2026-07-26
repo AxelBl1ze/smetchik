@@ -157,7 +157,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 18),
             OutlinedButton.icon(
-              onPressed: () => ref.read(authControllerProvider).signOut(),
+              onPressed: () async {
+                await ref.read(authControllerProvider).signOut();
+                if (context.mounted) context.go('/auth');
+              },
               icon: const Icon(Icons.logout),
               label: const Text('Выйти'),
               style: OutlinedButton.styleFrom(
@@ -796,6 +799,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       final result = await ref.read(repositoryProvider).redeemPromo(code: code);
       ref.invalidate(profileProvider);
+      ref.invalidate(teamWorkspaceProvider);
+      ref.invalidate(teamMembersProvider);
+      ref.invalidate(teamInvitesProvider);
       if (!mounted) return false;
       final date = result.renewsAt == null
           ? null
@@ -4313,7 +4319,7 @@ class _PromoCodeSheetState extends State<_PromoCodeSheet> {
                               ),
                               SizedBox(height: 2),
                               Text(
-                                'Доступ Профи появится сразу после проверки',
+                                'Тариф из промокода появится сразу после проверки',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
                                   fontSize: 13,

@@ -53,6 +53,8 @@ Deno.serve(async (request) => {
         return json(await revokeSubscription(context, body));
       case 'set_user_block':
         return json(await setUserBlock(context, body));
+      case 'delete_user':
+        return json(await deleteUser(context, body));
       case 'set_admin_role':
         return json(await setAdminRole(context, body));
       case 'signed_estimates':
@@ -171,7 +173,7 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
   const teams = teamIds.length
     ? await context.admin
       .from('teams')
-      .select('id,name,owner_user_id')
+      .select('id,name,owner_user_id,max_members')
       .in('id', teamIds)
     : { data: [], error: null };
   if (teams.error) throw teams.error;
@@ -194,7 +196,12 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
       const profile = byId.get(user.id) ?? {};
       const membership = membershipByUserId.get(user.id);
       const team = membership ? teamById.get(membership.team_id) : null;
+      const teamOwner = team ? byId.get(team.owner_user_id) : null;
       const teamManaged = profile.subscription_plan === 'team' || Boolean(membership);
+      // A workspace subscription belongs to its owner. Reading the owner's
+      // status makes the admin list correct even if an older member profile
+      // has not yet been synchronised by the database trigger.
+      const subscription = teamManaged && teamOwner ? teamOwner : profile;
       return {
         id: user.id,
         email: user.email ?? null,
@@ -203,9 +210,9 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
         phone: profile.phone ?? null,
         specialization: profile.specialization ?? null,
         subscriptionPlan: teamManaged ? 'team' : profile.subscription_plan ?? 'basic',
-        subscriptionStatus: profile.subscription_status ?? 'active',
-        subscriptionSource: profile.subscription_source ?? 'manual',
-        subscriptionRenewsAt: profile.subscription_renews_at ?? null,
+        subscriptionStatus: subscription.subscription_status ?? 'active',
+        subscriptionSource: subscription.subscription_source ?? 'manual',
+        subscriptionRenewsAt: subscription.subscription_renews_at ?? null,
         teamManaged,
         team: membership
           ? {
@@ -213,6 +220,7 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
             name: team?.name ?? 'Бригада',
             role: membership.role,
             ownerUserId: team?.owner_user_id ?? null,
+            maxMembers: team?.max_members ?? 6,
           }
           : null,
         bannedUntil: user.banned_until ?? null,
@@ -237,7 +245,7 @@ async function promos(context: AdminContext): Promise<JsonRecord> {
   const response = await context.admin
     .from('promo_codes')
     .select(
-      'id,code_hint,code_value,title,plan,grant_days,max_redemptions,redemption_count,starts_at,expires_at,is_active,disabled_at,created_at',
+      'id,code_hint,code_value,title,plan,grant_days,team_max_members,max_redemptions,redemption_count,starts_at,expires_at,is_active,disabled_at,created_at',
     )
     .order('created_at', { ascending: false })
     .limit(100);
@@ -253,6 +261,9 @@ async function createPromo(
   const title = firstString(body.title) ?? 'Промокод Профи';
   const plan = firstString(body.plan) === 'team' ? 'team' : 'pro';
   const grantDays = boundedInt(body.grantDays, 30, 1, 1095);
+  const teamMaxMembers = plan === 'team'
+    ? boundedInt(body.teamMaxMembers, 6, 2, 60)
+    : 6;
   const maxRedemptions = boundedInt(body.maxRedemptions, 1, 1, 100000);
   const startsAt = optionalDate(body.startsAt);
   const expiresAt = optionalDate(body.expiresAt);
@@ -270,11 +281,12 @@ async function createPromo(
     title: title.slice(0, 120),
     plan,
     grant_days: grantDays,
+    team_max_members: teamMaxMembers,
     max_redemptions: maxRedemptions,
     starts_at: startsAt,
     expires_at: expiresAt,
     created_by: context.user.id,
-  }).select('id,code_hint,code_value,title,plan,grant_days,max_redemptions,starts_at,expires_at,is_active').single();
+  }).select('id,code_hint,code_value,title,plan,grant_days,team_max_members,max_redemptions,starts_at,expires_at,is_active').single();
   if (response.error) {
     if (response.error.code === '23505') {
       throw new HttpError('Такой промокод уже существует. Выберите другой.', 409);
@@ -286,6 +298,7 @@ async function createPromo(
     title: response.data.title,
     plan,
     grantDays,
+    teamMaxMembers: plan === 'team' ? teamMaxMembers : null,
     maxRedemptions,
   });
   return { promo: response.data, code: rawCode };
@@ -444,6 +457,79 @@ async function setUserBlock(
   if (update.error) throw update.error;
   await logEvent(context, blocked ? 'user_blocked' : 'user_unblocked', 'profile', userId);
   return { userId, blocked };
+}
+
+async function deleteUser(
+  context: AdminContext,
+  body: JsonRecord,
+): Promise<JsonRecord> {
+  requireOwner(context);
+  const userId = requiredUuid(body.userId, 'пользователя');
+  const password = firstString(body.ownerPassword);
+  const confirmation = firstString(body.confirmation);
+  if (confirmation !== 'УДАЛИТЬ') {
+    throw new HttpError('Введите «УДАЛИТЬ» для подтверждения.', 400);
+  }
+  if (!password) throw new HttpError('Введите пароль владельца.', 400);
+  if (userId === context.user.id) {
+    throw new HttpError('Нельзя удалить собственный аккаунт из админ-панели.', 400);
+  }
+
+  const targetAdmin = await context.admin
+    .from('app_admins')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('enabled', true)
+    .maybeSingle();
+  if (targetAdmin.error) throw targetAdmin.error;
+  if (targetAdmin.data) {
+    throw new HttpError('Сначала отзовите служебный доступ у этого аккаунта.', 409);
+  }
+
+  const ownedTeam = await context.admin
+    .from('teams')
+    .select('id')
+    .eq('owner_user_id', userId)
+    .maybeSingle();
+  if (ownedTeam.error) throw ownedTeam.error;
+  if (ownedTeam.data) {
+    throw new HttpError('Сначала расформируйте бригаду или передайте её владельца.', 409);
+  }
+
+  const signed = await context.admin
+    .from('estimates')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .not('client_signed_at', 'is', null);
+  if (signed.error) throw signed.error;
+  if ((signed.count ?? 0) > 0) {
+    throw new HttpError(
+      'У аккаунта есть подписанные сметы. Для сохранности доказательств удаление недоступно.',
+      409,
+    );
+  }
+
+  const ownerEmail = context.user.email;
+  if (!ownerEmail) throw new HttpError('Не удалось определить email владельца.', 400);
+  const verifier = createClient(
+    requireEnv('SUPABASE_URL'),
+    requireEnv('SUPABASE_ANON_KEY'),
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+  const verification = await verifier.auth.signInWithPassword({
+    email: ownerEmail,
+    password,
+  });
+  if (verification.error || verification.data.user?.id !== context.user.id) {
+    throw new HttpError('Пароль владельца не подошёл.', 401);
+  }
+
+  const deletion = await context.admin.auth.admin.deleteUser(userId);
+  if (deletion.error) throw deletion.error;
+  await logEvent(context, 'user_deleted', 'profile', userId, {
+    deletion: 'hard',
+  });
+  return { userId, deleted: true };
 }
 
 async function setAdminRole(

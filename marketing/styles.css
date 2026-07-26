@@ -112,6 +112,11 @@ img { max-width:100%; display:block; }
 /* Conversion details stay deliberately quiet: the product remains the focus. */
 .hero-start-note { display:flex; align-items:center; gap:7px; margin:16px 0 0; color:#aaa49b; font-size:11px; line-height:1.45; }
 .hero-start-note span { display:grid; place-items:center; width:16px; height:16px; flex:0 0 auto; color:#181715; background:var(--orange); border-radius:50%; font-size:10px; font-weight:900; }
+.hero-promo { display:inline-flex; align-items:center; gap:9px; margin-top:16px; padding:8px 9px 8px 12px; color:#d4cec4; background:#22211e; border:1px solid #46433e; font-size:11px; font-weight:700; }
+.hero-promo button { display:inline-flex; align-items:center; gap:7px; padding:5px 7px; color:#1c1b18; background:var(--orange); border:0; cursor:pointer; font:inherit; font-weight:900; transition:transform .16s ease,background-color .16s ease; }
+.hero-promo button:hover { background:#ff9a32; transform:translateY(-1px); }
+.hero-promo code { font-family:inherit; letter-spacing:.06em; }
+.hero-promo i { font-size:14px; font-style:normal; line-height:1; }
 .workflow-action { display:block!important; padding:22px 0 0!important; }
 .workflow-action a,.text-action { display:inline-flex; align-items:center; gap:8px; color:var(--orange-dark); font-size:13px; font-weight:900; transition:gap .18s ease,color .18s ease; }
 .workflow-action a:hover,.text-action:hover { gap:12px; color:var(--ink); }
@@ -131,6 +136,7 @@ img { max-width:100%; display:block; }
 }
 
 @media (max-width:720px) {
+  .hero-promo { width:100%; justify-content:space-between; box-sizing:border-box; }
   .hero-start-note { align-items:flex-start; max-width:340px; }
   .cases { padding:76px 0; }
   .case-placeholder { min-height:0; }

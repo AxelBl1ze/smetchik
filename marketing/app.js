@@ -82,6 +82,23 @@ document.querySelectorAll("[data-proof]").forEach((button) => {
   });
 });
 
+document.querySelectorAll("[data-copy-promo]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const code = button.dataset.copyPromo;
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      const previous = button.innerHTML;
+      button.textContent = "Скопировано";
+      window.setTimeout(() => {
+        button.innerHTML = previous;
+      }, 1600);
+    } catch {
+      window.prompt("Скопируйте промокод", code);
+    }
+  });
+});
+
 const observer = new IntersectionObserver(
   (entries) => {
     entries.forEach((entry) => {

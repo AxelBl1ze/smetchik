@@ -1113,6 +1113,36 @@ class _UsersViewState extends State<_UsersView> {
     }
   }
 
+  Future<void> _delete(Map<String, dynamic> user) async {
+    final request = await showDialog<_DeleteUserRequest>(
+      context: context,
+      builder: (_) => _DeleteUserDialog(
+        userName: _fallback(user['fullName'], 'этот аккаунт'),
+      ),
+    );
+    if (request == null) return;
+    try {
+      await widget.api.call(
+        'delete_user',
+        body: {
+          'userId': user['id'],
+          'ownerPassword': request.ownerPassword,
+          'confirmation': request.confirmation,
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Аккаунт удалён')));
+      await _load();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_message(error))));
+    }
+  }
+
   Future<void> _setAdminRole(Map<String, dynamic> user, String? role) async {
     final name = _fallback(user['fullName'], 'этого пользователя');
     final label = _adminRoleLabel(role);
@@ -1204,6 +1234,7 @@ class _UsersViewState extends State<_UsersView> {
                 onAdminRoleChanged: widget.canManageAdmins
                     ? (role) => _setAdminRole(user, role)
                     : null,
+                onDelete: widget.canManageAdmins ? () => _delete(user) : null,
                 currentAdminId: widget.currentAdminId,
               ),
             ),
@@ -1220,6 +1251,7 @@ class _AdminUserCard extends StatelessWidget {
     required this.onRevoke,
     required this.onBlockChanged,
     required this.onAdminRoleChanged,
+    required this.onDelete,
     required this.currentAdminId,
   });
 
@@ -1228,6 +1260,7 @@ class _AdminUserCard extends StatelessWidget {
   final VoidCallback onRevoke;
   final ValueChanged<bool> onBlockChanged;
   final ValueChanged<String?>? onAdminRoleChanged;
+  final VoidCallback? onDelete;
   final String currentAdminId;
 
   void _openControls(
@@ -1236,6 +1269,7 @@ class _AdminUserCard extends StatelessWidget {
     required bool blocked,
     required bool canBlock,
     required bool canChangeRoles,
+    required bool canDelete,
   }) {
     showModalBottomSheet<void>(
       context: context,
@@ -1247,8 +1281,10 @@ class _AdminUserCard extends StatelessWidget {
         blocked: blocked,
         canBlock: canBlock,
         canChangeRoles: canChangeRoles,
+        canDelete: canDelete,
         onBlockChanged: onBlockChanged,
         onAdminRoleChanged: onAdminRoleChanged,
+        onDelete: onDelete,
       ),
     );
   }
@@ -1271,7 +1307,8 @@ class _AdminUserCard extends StatelessWidget {
     final isCurrentAdmin = user['id']?.toString() == currentAdminId;
     final canBlock = adminRole.isEmpty;
     final canChangeRoles = onAdminRoleChanged != null && !isCurrentAdmin;
-    final canManage = canBlock || canChangeRoles;
+    final canDelete = onDelete != null && !isCurrentAdmin && adminRole.isEmpty;
+    final canManage = canBlock || canChangeRoles || canDelete;
     return SmetchikCard(
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -1408,6 +1445,7 @@ class _AdminUserCard extends StatelessWidget {
                     blocked: blocked,
                     canBlock: canBlock,
                     canChangeRoles: canChangeRoles,
+                    canDelete: canDelete,
                   ),
                   icon: const Icon(Icons.tune_rounded),
                 )
@@ -1454,8 +1492,10 @@ class _UserControlsSheet extends StatelessWidget {
     required this.blocked,
     required this.canBlock,
     required this.canChangeRoles,
+    required this.canDelete,
     required this.onBlockChanged,
     required this.onAdminRoleChanged,
+    required this.onDelete,
   });
 
   final String userName;
@@ -1463,8 +1503,10 @@ class _UserControlsSheet extends StatelessWidget {
   final bool blocked;
   final bool canBlock;
   final bool canChangeRoles;
+  final bool canDelete;
   final ValueChanged<bool> onBlockChanged;
   final ValueChanged<String?>? onAdminRoleChanged;
+  final VoidCallback? onDelete;
 
   void _closeThen(BuildContext context, VoidCallback action) {
     Navigator.of(context).pop();
@@ -1598,6 +1640,18 @@ class _UserControlsSheet extends StatelessWidget {
                       () => onAdminRoleChanged?.call(null),
                     ),
                   ),
+              ],
+              if (canDelete) ...[
+                const SizedBox(height: 18),
+                _UserControlActionButton(
+                  icon: Icons.delete_forever_outlined,
+                  title: 'Удалить аккаунт',
+                  subtitle:
+                      'Потребуется пароль владельца. Это действие необратимо.',
+                  color: AppColors.danger,
+                  background: AppColors.dangerBg,
+                  onTap: () => _closeThen(context, () => onDelete?.call()),
+                ),
               ],
             ],
           ),
@@ -1951,7 +2005,7 @@ class _PromoCard extends StatelessWidget {
                       )
                     else
                       Text(
-                        '${_fallback(promo['code_hint'], '***')} · ${_integer(promo['grant_days'])} дней ${promo['plan'] == 'team' ? 'Бригада' : 'Профи'}',
+                        '${_fallback(promo['code_hint'], '***')} · ${_integer(promo['grant_days'])} дней ${promo['plan'] == 'team' ? 'Бригада · ${_integer(promo['team_max_members'])} мест' : 'Профи'}',
                         style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
@@ -1959,7 +2013,7 @@ class _PromoCard extends StatelessWidget {
                       ),
                     const SizedBox(height: 4),
                     Text(
-                      '$redemptions из $maximum активаций · ${_integer(promo['grant_days'])} дней ${promo['plan'] == 'team' ? 'Бригада' : 'Профи'}${expires == null ? '' : ' · до ${formatDate(expires)}'}',
+                      '$redemptions из $maximum активаций · ${_integer(promo['grant_days'])} дней ${promo['plan'] == 'team' ? 'Бригада · ${_integer(promo['team_max_members'])} мест' : 'Профи'}${expires == null ? '' : ' · до ${formatDate(expires)}'}',
                       style: const TextStyle(
                         color: AppColors.textHint,
                         fontSize: 12,
@@ -3381,6 +3435,7 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
   final _title = TextEditingController(text: 'Профи на 30 дней');
   final _days = TextEditingController(text: '30');
   final _limit = TextEditingController(text: '1');
+  final _teamSeats = TextEditingController(text: '6');
   DateTime? _expiresAt;
   String _plan = 'pro';
 
@@ -3389,6 +3444,7 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
     _title.dispose();
     _days.dispose();
     _limit.dispose();
+    _teamSeats.dispose();
     super.dispose();
   }
 
@@ -3414,6 +3470,9 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
         days: days,
         limit: limit,
         expiresAt: _expiresAt,
+        teamMaxMembers: _plan == 'team'
+            ? (int.tryParse(_teamSeats.text) ?? 6).clamp(2, 60)
+            : 6,
       ),
     );
   }
@@ -3486,6 +3545,18 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
             onSelectionChanged: (value) => setState(() => _plan = value.first),
           ),
           const SizedBox(height: 12),
+          if (_plan == 'team') ...[
+            TextField(
+              controller: _teamSeats,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Всего мест в бригаде',
+                helperText: 'Включая владельца. Можно выдать от 2 до 60 мест.',
+                prefixIcon: Icon(Icons.groups_2_outlined),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Row(
             children: [
               Expanded(
@@ -3506,17 +3577,28 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
             ],
           ),
           const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _pickExpiry,
-              icon: const Icon(Icons.event_outlined),
-              label: Text(
-                _expiresAt == null
-                    ? 'Без срока действия'
-                    : 'Действует до ${formatDate(_expiresAt!)}',
+          Row(
+            children: [
+              Expanded(
+                child: _PromoDateOption(
+                  selected: _expiresAt == null,
+                  icon: Icons.all_inclusive_rounded,
+                  label: 'Бессрочно',
+                  onTap: () => setState(() => _expiresAt = null),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _PromoDateOption(
+                  selected: _expiresAt != null,
+                  icon: Icons.event_outlined,
+                  label: _expiresAt == null
+                      ? 'Указать дату'
+                      : formatDate(_expiresAt!),
+                  onTap: _pickExpiry,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -3531,6 +3613,7 @@ class _PromoRequest {
     required this.days,
     required this.limit,
     required this.expiresAt,
+    required this.teamMaxMembers,
   });
 
   final String title;
@@ -3538,14 +3621,78 @@ class _PromoRequest {
   final int days;
   final int limit;
   final DateTime? expiresAt;
+  final int teamMaxMembers;
 
   Map<String, dynamic> toJson() => {
     'title': title,
     'plan': plan,
     'grantDays': days,
     'maxRedemptions': limit,
+    'teamMaxMembers': teamMaxMembers,
     if (expiresAt != null) 'expiresAt': expiresAt!.toUtc().toIso8601String(),
   };
+}
+
+class _PromoDateOption extends StatelessWidget {
+  const _PromoDateOption({
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.orangeLight : AppColors.background,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 48,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? AppColors.orange : AppColors.border,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: selected
+                    ? AppColors.orangeDark
+                    : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected
+                        ? AppColors.orangeDark
+                        : AppColors.textSecondary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AdminMark extends StatelessWidget {
@@ -3752,6 +3899,115 @@ class _AdminRefreshButton extends StatelessWidget {
           height: 46,
           child: Icon(Icons.refresh_rounded, color: AppColors.orange),
         ),
+      ),
+    );
+  }
+}
+
+class _DeleteUserRequest {
+  const _DeleteUserRequest({
+    required this.ownerPassword,
+    required this.confirmation,
+  });
+
+  final String ownerPassword;
+  final String confirmation;
+}
+
+class _DeleteUserDialog extends StatefulWidget {
+  const _DeleteUserDialog({required this.userName});
+
+  final String userName;
+
+  @override
+  State<_DeleteUserDialog> createState() => _DeleteUserDialogState();
+}
+
+class _DeleteUserDialogState extends State<_DeleteUserDialog> {
+  final _password = TextEditingController();
+  final _confirmation = TextEditingController();
+  bool _obscure = true;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _confirmation.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_password.text.isEmpty || _confirmation.text.trim() != 'УДАЛИТЬ') {
+      setState(() {});
+      return;
+    }
+    Navigator.of(context).pop(
+      _DeleteUserRequest(
+        ownerPassword: _password.text,
+        confirmation: _confirmation.text.trim(),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final valid =
+        _password.text.isNotEmpty && _confirmation.text.trim() == 'УДАЛИТЬ';
+    return _AdminDialogFrame(
+      icon: Icons.delete_forever_outlined,
+      title: 'Удалить аккаунт',
+      subtitle:
+          'Удаляется аккаунт «${widget.userName}» и обычные данные без подписанных смет. Действие нельзя отменить.',
+      footer: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Отмена'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+              onPressed: valid ? _submit : null,
+              icon: const Icon(Icons.delete_forever_outlined),
+              label: const Text('Удалить'),
+            ),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _confirmation,
+            onChanged: (_) => setState(() {}),
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              labelText: 'Напишите УДАЛИТЬ',
+              prefixIcon: Icon(Icons.warning_amber_rounded),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _password,
+            onChanged: (_) => setState(() {}),
+            obscureText: _obscure,
+            decoration: InputDecoration(
+              labelText: 'Пароль владельца',
+              prefixIcon: const Icon(Icons.lock_outline),
+              suffixIcon: IconButton(
+                tooltip: _obscure ? 'Показать пароль' : 'Скрыть пароль',
+                onPressed: () => setState(() => _obscure = !_obscure),
+                icon: Icon(
+                  _obscure
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

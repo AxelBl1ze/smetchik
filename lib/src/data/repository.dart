@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/app_config.dart';
+import '../core/auth_controller.dart';
 import 'local_data_cache.dart';
 import 'models.dart';
 import 'signing.dart';
@@ -15,15 +16,25 @@ final repositoryProvider = Provider<SmetchikRepository>((ref) {
   return SmetchikRepository(Supabase.instance.client);
 });
 
+// All remote data is scoped to the signed-in user. Depending on this value
+// prevents Riverpod from reusing a previous master's FutureProvider cache
+// after a fast logout/login in the installed PWA.
+final activeUserIdProvider = Provider<String?>((ref) {
+  return ref.watch(authControllerProvider.select((auth) => auth.user?.id));
+});
+
 final profileProvider = FutureProvider<ProfileModel?>((ref) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchProfile();
 });
 
 final clientsProvider = FutureProvider<List<ClientModel>>((ref) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchClients();
 });
 
 final catalogDataProvider = FutureProvider<CatalogData>((ref) {
+  ref.watch(activeUserIdProvider);
   ref.keepAlive();
   return ref.watch(repositoryProvider).fetchCatalogData();
 });
@@ -39,40 +50,52 @@ final catalogCategoriesProvider = FutureProvider<List<String>>((ref) async {
 });
 
 final estimatesProvider = FutureProvider<List<EstimateModel>>((ref) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchEstimates();
 });
 
 final projectsProvider = FutureProvider<List<ProjectModel>>((ref) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchProjects();
 });
 
-final projectDetailProvider = FutureProvider.family<ProjectDetail, String>(
-  (ref, id) => ref.watch(repositoryProvider).fetchProjectDetail(id),
-);
+final projectDetailProvider = FutureProvider.family<ProjectDetail, String>((
+  ref,
+  id,
+) {
+  ref.watch(activeUserIdProvider);
+  return ref.watch(repositoryProvider).fetchProjectDetail(id);
+});
 
 final teamWorkspaceProvider = FutureProvider<TeamWorkspaceModel?>((ref) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchTeamWorkspace();
 });
 
 final teamMembersProvider = FutureProvider<List<TeamMemberModel>>((ref) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchTeamMembers();
 });
 
 final teamInvitesProvider = FutureProvider<List<TeamInviteModel>>((ref) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchTeamInvites();
 });
 
 final incomingTeamInvitesProvider =
     FutureProvider<List<IncomingTeamInviteModel>>((ref) {
+      ref.watch(activeUserIdProvider);
       return ref.watch(repositoryProvider).fetchIncomingTeamInvites();
     });
 
 final supportTicketsProvider = FutureProvider<List<SupportTicketModel>>((ref) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchSupportTickets();
 });
 
 final supportMessagesProvider =
     FutureProvider.family<List<SupportMessageModel>, String>((ref, ticketId) {
+      ref.watch(activeUserIdProvider);
       return ref.watch(repositoryProvider).fetchSupportMessages(ticketId);
     });
 
@@ -80,6 +103,7 @@ final estimateDetailProvider = FutureProvider.family<EstimateDetail, String>((
   ref,
   id,
 ) {
+  ref.watch(activeUserIdProvider);
   return ref.watch(repositoryProvider).fetchEstimateDetail(id);
 });
 

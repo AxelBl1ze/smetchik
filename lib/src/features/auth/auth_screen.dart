@@ -413,7 +413,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
         SignupConsentRow(
           value: _privacyAccepted,
           label: 'Соглашаюсь с',
-          documentTitle: LegalDocuments.privacy.title,
+          documentTitle: 'Политикой конфиденциальности',
           onChanged: (value) => setState(() => _privacyAccepted = value),
           onOpen: () => context.push('/legal/privacy'),
         ),

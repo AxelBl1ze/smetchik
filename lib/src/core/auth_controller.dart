@@ -18,6 +18,7 @@ class AuthController extends ChangeNotifier {
     _client = Supabase.instance.client;
     user = _client!.auth.currentUser;
     _sub = _client!.auth.onAuthStateChange.listen((event) {
+      if (_ignoringAuthEvents) return;
       if (event.event == AuthChangeEvent.passwordRecovery) {
         isPasswordRecovery = true;
       }
@@ -27,7 +28,13 @@ class AuthController extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      user = event.session?.user ?? _client!.auth.currentUser;
+      final nextUser = event.session?.user ?? _client!.auth.currentUser;
+      final expectedEmail = _expectedEmail;
+      if (expectedEmail != null &&
+          nextUser?.email?.trim().toLowerCase() != expectedEmail) {
+        return;
+      }
+      user = nextUser;
       notifyListeners();
     });
   }
@@ -39,6 +46,8 @@ class AuthController extends ChangeNotifier {
   bool isBusy = false;
   String? _phoneRequestId;
   String? _phoneForRequest;
+  String? _expectedEmail;
+  bool _ignoringAuthEvents = false;
 
   bool get isLoggedIn => user != null;
 
@@ -46,10 +55,8 @@ class AuthController extends ChangeNotifier {
     await _run(() async {
       // Never keep an old session alive while another account is attempting
       // to enter. This prevents routing with a previous user's profile.
-      if (_client!.auth.currentSession != null) {
-        await _client!.auth.signOut(scope: SignOutScope.local);
-        user = null;
-      }
+      await _clearLocalSession();
+      _expectedEmail = email.trim().toLowerCase();
       final response = await _client!.auth.signInWithPassword(
         email: email.trim(),
         password: password,
@@ -63,6 +70,7 @@ class AuthController extends ChangeNotifier {
         );
       }
       user = response.user;
+      _expectedEmail = signedInEmail;
     });
   }
 
@@ -76,10 +84,8 @@ class AuthController extends ChangeNotifier {
     return _run(() async {
       // Registration is only reachable for signed-out users. Clear any stale
       // local session before creating a new account so sessions cannot cross.
-      if (_client!.auth.currentSession != null) {
-        await _client!.auth.signOut(scope: SignOutScope.local);
-        user = null;
-      }
+      await _clearLocalSession();
+      _expectedEmail = email.trim().toLowerCase();
       final response = await _client!.auth.signUp(
         email: email.trim(),
         password: password,
@@ -116,6 +122,7 @@ class AuthController extends ChangeNotifier {
           );
         }
         user = response.session!.user;
+        _expectedEmail = signedUpEmail;
       }
       return SignUpResult.signedIn;
     });
@@ -149,8 +156,7 @@ class AuthController extends ChangeNotifier {
 
   Future<void> signOut() async {
     await _run(() async {
-      await _client!.auth.signOut(scope: SignOutScope.local);
-      user = null;
+      await _clearLocalSession();
       isPasswordRecovery = false;
     });
   }
@@ -179,10 +185,8 @@ class AuthController extends ChangeNotifier {
     required String code,
   }) async {
     await _run(() async {
-      if (_client!.auth.currentSession != null) {
-        await _client!.auth.signOut(scope: SignOutScope.local);
-        user = null;
-      }
+      await _clearLocalSession();
+      _expectedEmail = email.trim().toLowerCase();
       final response = await _client!.auth.verifyOTP(
         email: email.trim(),
         token: code.trim(),
@@ -195,6 +199,7 @@ class AuthController extends ChangeNotifier {
         throw const AuthException('Код не открыл сессию указанного аккаунта.');
       }
       user = response.user;
+      _expectedEmail = signedInEmail;
     });
   }
 
@@ -245,6 +250,7 @@ class AuthController extends ChangeNotifier {
         throw const AuthException('Сначала запросите код Telegram.');
       }
 
+      await _clearLocalSession();
       final response = await _client!.functions.invoke(
         'telegram-auth',
         body: {
@@ -263,6 +269,7 @@ class AuthController extends ChangeNotifier {
         throw const AuthException('Telegram-код принят, но сессия не создана.');
       }
       await _client!.auth.setSession(refreshToken, accessToken: accessToken);
+      _expectedEmail = null;
       _phoneRequestId = null;
       _phoneForRequest = null;
     });
@@ -279,6 +286,18 @@ class AuthController extends ChangeNotifier {
     } finally {
       isBusy = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _clearLocalSession() async {
+    _expectedEmail = null;
+    _ignoringAuthEvents = true;
+    user = null;
+    notifyListeners();
+    try {
+      await _client!.auth.signOut(scope: SignOutScope.local);
+    } finally {
+      _ignoringAuthEvents = false;
     }
   }
 
