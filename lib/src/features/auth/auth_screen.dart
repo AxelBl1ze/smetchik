@@ -668,11 +668,6 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       _setError('Пароль должен быть не короче 6 символов');
       return;
     }
-    if (!_termsAccepted || !_privacyAccepted) {
-      _setError('Ознакомьтесь и согласитесь с документами для регистрации');
-      return;
-    }
-
     await _runAuthAction(() async {
       await ref
           .read(authControllerProvider)

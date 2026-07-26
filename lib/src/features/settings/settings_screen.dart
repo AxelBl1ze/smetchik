@@ -4820,49 +4820,7 @@ class _TeamSubscriptionCard extends StatelessWidget {
         profile?.hasActivePro == true &&
         profile?.effectiveSubscriptionPlan == SubscriptionPlan.team;
     if (!isTeam) {
-      return SmetchikCard(
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.orangeLight,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: const Icon(
-                Icons.groups_2_outlined,
-                color: AppColors.orangeDark,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Бригада',
-                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                  ),
-                  SizedBox(height: 3),
-                  Text(
-                    'Один тариф для вас и ещё 5 мастеров.',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              onPressed: onOpenPlans,
-              tooltip: 'Тариф Бригада',
-              icon: const Icon(Icons.arrow_forward_ios, size: 18),
-            ),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     return workspace.when(
