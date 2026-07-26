@@ -1968,6 +1968,7 @@ class _PromoCard extends StatelessWidget {
     final active = promo['is_active'] == true;
     final redemptions = _integer(promo['redemption_count']);
     final maximum = _integer(promo['max_redemptions']);
+    final unlimited = promo['unlimited_redemptions'] == true;
     final expires = _date(promo['expires_at']);
     final rawCode = _fallback(promo['code_value'], '');
     return SmetchikCard(
@@ -2013,7 +2014,7 @@ class _PromoCard extends StatelessWidget {
                       ),
                     const SizedBox(height: 4),
                     Text(
-                      '$redemptions из $maximum активаций · ${_integer(promo['grant_days'])} дней ${promo['plan'] == 'team' ? 'Бригада · ${_integer(promo['team_max_members'])} мест' : 'Профи'}${expires == null ? '' : ' · до ${formatDate(expires)}'}',
+                      '${unlimited ? '$redemptions активаций без лимита' : '$redemptions из $maximum активаций'} · ${_integer(promo['grant_days'])} дней ${promo['plan'] == 'team' ? 'Бригада · ${_integer(promo['team_max_members'])} мест' : 'Профи'}${expires == null ? '' : ' · код до ${formatDate(expires)}'}',
                       style: const TextStyle(
                         color: AppColors.textHint,
                         fontSize: 12,
@@ -3438,6 +3439,7 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
   final _teamSeats = TextEditingController(text: '6');
   DateTime? _expiresAt;
   String _plan = 'pro';
+  bool _unlimitedRedemptions = false;
 
   @override
   void dispose() {
@@ -3449,12 +3451,12 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
   }
 
   Future<void> _pickExpiry() async {
-    final date = await showDatePicker(
+    final date = await showDialog<DateTime>(
       context: context,
-      firstDate: DateTime.now(),
-      initialDate: _expiresAt ?? DateTime.now().add(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 1095)),
-      locale: const Locale('ru'),
+      useRootNavigator: true,
+      builder: (_) => _PromoExpiryDialog(
+        initialDate: _expiresAt ?? DateTime.now().add(const Duration(days: 30)),
+      ),
     );
     if (date != null && mounted) setState(() => _expiresAt = date);
   }
@@ -3462,7 +3464,11 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
   void _submit() {
     final days = int.tryParse(_days.text) ?? 0;
     final limit = int.tryParse(_limit.text) ?? 0;
-    if (_title.text.trim().isEmpty || days < 1 || limit < 1) return;
+    if (_title.text.trim().isEmpty ||
+        days < 1 ||
+        (!_unlimitedRedemptions && limit < 1)) {
+      return;
+    }
     Navigator.of(context).pop(
       _PromoRequest(
         title: _title.text.trim(),
@@ -3473,6 +3479,7 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
         teamMaxMembers: _plan == 'team'
             ? (int.tryParse(_teamSeats.text) ?? 6).clamp(2, 60)
             : 6,
+        unlimitedRedemptions: _unlimitedRedemptions,
       ),
     );
   }
@@ -3482,7 +3489,8 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
     return _AdminDialogFrame(
       icon: Icons.local_offer_outlined,
       title: 'Новый промокод',
-      subtitle: 'Код из 16 символов будет создан автоматически.',
+      subtitle:
+          'Код из 16 символов будет создан автоматически. Дни тарифа начнутся после активации.',
       footer: Row(
         children: [
           Expanded(
@@ -3563,20 +3571,55 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
                 child: TextField(
                   controller: _days,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Дней Профи'),
+                  decoration: const InputDecoration(labelText: 'Дней тарифа'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: TextField(
-                  controller: _limit,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Активаций'),
-                ),
+                child: _unlimitedRedemptions
+                    ? const _PromoFieldSummary(
+                        icon: Icons.all_inclusive_rounded,
+                        label: 'Активации',
+                        value: 'Безлимитно',
+                      )
+                    : TextField(
+                        controller: _limit,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Активаций',
+                        ),
+                      ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          _PromoToggleTile(
+            value: _unlimitedRedemptions,
+            title: 'Безлимитные активации',
+            subtitle: 'Код останется активным, пока его не отключат вручную.',
+            onChanged: (value) => setState(() => _unlimitedRedemptions = value),
+          ),
+          const SizedBox(height: 16),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Срок активации кода',
+              style: TextStyle(fontWeight: FontWeight.w900),
+            ),
+          ),
+          const SizedBox(height: 3),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Не влияет на дни тарифа: они начнутся после активации кода.',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                height: 1.3,
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -3614,6 +3657,7 @@ class _PromoRequest {
     required this.limit,
     required this.expiresAt,
     required this.teamMaxMembers,
+    required this.unlimitedRedemptions,
   });
 
   final String title;
@@ -3622,6 +3666,7 @@ class _PromoRequest {
   final int limit;
   final DateTime? expiresAt;
   final int teamMaxMembers;
+  final bool unlimitedRedemptions;
 
   Map<String, dynamic> toJson() => {
     'title': title,
@@ -3629,6 +3674,7 @@ class _PromoRequest {
     'grantDays': days,
     'maxRedemptions': limit,
     'teamMaxMembers': teamMaxMembers,
+    'unlimitedRedemptions': unlimitedRedemptions,
     if (expiresAt != null) 'expiresAt': expiresAt!.toUtc().toIso8601String(),
   };
 }
@@ -3690,6 +3736,176 @@ class _PromoDateOption extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PromoFieldSummary extends StatelessWidget {
+  const _PromoFieldSummary({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 13),
+      decoration: BoxDecoration(
+        color: AppColors.orangeLight,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.orange),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: AppColors.orangeDark, size: 19),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  value,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PromoToggleTile extends StatelessWidget {
+  const _PromoToggleTile({
+    required this.value,
+    required this.title,
+    required this.subtitle,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final String title;
+  final String subtitle;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: value ? AppColors.orangeLight : AppColors.background,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: value ? AppColors.orange : AppColors.border,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: value ? Colors.white : AppColors.card,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(
+                  Icons.all_inclusive_rounded,
+                  color: value ? AppColors.orangeDark : AppColors.textHint,
+                  size: 19,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        height: 1.25,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(value: value, onChanged: onChanged),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PromoExpiryDialog extends StatefulWidget {
+  const _PromoExpiryDialog({required this.initialDate});
+
+  final DateTime initialDate;
+
+  @override
+  State<_PromoExpiryDialog> createState() => _PromoExpiryDialogState();
+}
+
+class _PromoExpiryDialogState extends State<_PromoExpiryDialog> {
+  late DateTime _selected = widget.initialDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return _AdminDialogFrame(
+      icon: Icons.event_outlined,
+      title: 'Срок активации',
+      subtitle: 'После этой даты промокод нельзя будет применить.',
+      footer: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Отмена'),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(_selected),
+              child: const Text('Выбрать дату'),
+            ),
+          ),
+        ],
+      ),
+      child: CalendarDatePicker(
+        initialDate: _selected,
+        firstDate: DateTime.now(),
+        lastDate: DateTime.now().add(const Duration(days: 1095)),
+        onDateChanged: (value) => setState(() => _selected = value),
       ),
     );
   }

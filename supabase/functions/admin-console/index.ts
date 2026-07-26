@@ -245,7 +245,7 @@ async function promos(context: AdminContext): Promise<JsonRecord> {
   const response = await context.admin
     .from('promo_codes')
     .select(
-      'id,code_hint,code_value,title,plan,grant_days,team_max_members,max_redemptions,redemption_count,starts_at,expires_at,is_active,disabled_at,created_at',
+      'id,code_hint,code_value,title,plan,grant_days,team_max_members,max_redemptions,redemption_count,unlimited_redemptions,starts_at,expires_at,is_active,disabled_at,created_at',
     )
     .order('created_at', { ascending: false })
     .limit(100);
@@ -264,7 +264,10 @@ async function createPromo(
   const teamMaxMembers = plan === 'team'
     ? boundedInt(body.teamMaxMembers, 6, 2, 60)
     : 6;
-  const maxRedemptions = boundedInt(body.maxRedemptions, 1, 1, 100000);
+  const unlimitedRedemptions = body.unlimitedRedemptions === true;
+  const maxRedemptions = unlimitedRedemptions
+    ? 100000
+    : boundedInt(body.maxRedemptions, 1, 1, 100000);
   const startsAt = optionalDate(body.startsAt);
   const expiresAt = optionalDate(body.expiresAt);
   if (startsAt && expiresAt && Date.parse(expiresAt) <= Date.parse(startsAt)) {
@@ -283,10 +286,11 @@ async function createPromo(
     grant_days: grantDays,
     team_max_members: teamMaxMembers,
     max_redemptions: maxRedemptions,
+    unlimited_redemptions: unlimitedRedemptions,
     starts_at: startsAt,
     expires_at: expiresAt,
     created_by: context.user.id,
-  }).select('id,code_hint,code_value,title,plan,grant_days,team_max_members,max_redemptions,starts_at,expires_at,is_active').single();
+  }).select('id,code_hint,code_value,title,plan,grant_days,team_max_members,max_redemptions,unlimited_redemptions,starts_at,expires_at,is_active').single();
   if (response.error) {
     if (response.error.code === '23505') {
       throw new HttpError('Такой промокод уже существует. Выберите другой.', 409);
@@ -300,6 +304,7 @@ async function createPromo(
     grantDays,
     teamMaxMembers: plan === 'team' ? teamMaxMembers : null,
     maxRedemptions,
+    unlimitedRedemptions,
   });
   return { promo: response.data, code: rawCode };
 }

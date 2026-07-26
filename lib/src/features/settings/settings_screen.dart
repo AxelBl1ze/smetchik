@@ -704,6 +704,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final controller = TextEditingController();
     final email = await showModalBottomSheet<String>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _TeamInviteSheet(
