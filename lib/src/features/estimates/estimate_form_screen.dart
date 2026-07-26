@@ -35,11 +35,13 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
   final _object = TextEditingController();
   final _clientName = TextEditingController();
   final _clientPhone = TextEditingController();
+  final _clientSearch = TextEditingController();
   final _duration = TextEditingController(text: '14');
   DateTime _date = DateTime.now();
   String? _clientId;
   final List<EstimateLineModel> _lines = [];
   bool _saving = false;
+  bool _showClientSearch = false;
   bool _hydrated = false;
   int _sourceDocumentVersion = 1;
 
@@ -53,6 +55,7 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
     _object.dispose();
     _clientName.dispose();
     _clientPhone.dispose();
+    _clientSearch.dispose();
     _duration.dispose();
     super.dispose();
   }
@@ -168,39 +171,7 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
           clients.when(
             data: (items) {
               if (items.isEmpty) return const SizedBox.shrink();
-              return Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (final client in items.take(8))
-                        Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: ActionChip(
-                            avatar: const Icon(Icons.person_outline, size: 16),
-                            label: Text(client.name),
-                            onPressed: () {
-                              setState(() {
-                                _clientId = client.id;
-                                _clientName.text = client.name;
-                                _clientPhone.text =
-                                    RussianPhoneInputFormatter.format(
-                                      client.phone ?? '',
-                                    );
-                                if (_object.text.trim().isEmpty &&
-                                    client.objectAddress?.trim().isNotEmpty ==
-                                        true) {
-                                  _object.text = client.objectAddress!.trim();
-                                }
-                              });
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              );
+              return _clientPicker(items);
             },
             loading: () => const SizedBox.shrink(),
             error: (_, _) => const SizedBox.shrink(),
@@ -312,6 +283,119 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
         ],
       ),
     );
+  }
+
+  Widget _clientPicker(List<ClientModel> clients) {
+    final query = _clientSearch.text.trim().toLowerCase();
+    final digits = query.replaceAll(RegExp(r'\D'), '');
+    final matches = clients
+        .where((client) {
+          if (query.isEmpty) return true;
+          final nameMatches = client.name.toLowerCase().contains(query);
+          final phoneMatches =
+              digits.isNotEmpty &&
+              (client.phone ?? '')
+                  .replaceAll(RegExp(r'\D'), '')
+                  .contains(digits);
+          return nameMatches || phoneMatches;
+        })
+        .take(6)
+        .toList();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SmetchikCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Недавние клиенты',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            for (final client in clients.take(3)) ...[
+              _ClientQuickPickTile(
+                client: client,
+                selected: client.id == _clientId,
+                onTap: () => _applyClient(client),
+              ),
+              if (client != clients.take(3).last) const SizedBox(height: 6),
+            ],
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _showClientSearch = !_showClientSearch;
+                if (!_showClientSearch) _clientSearch.clear();
+              }),
+              icon: Icon(
+                _showClientSearch
+                    ? Icons.keyboard_arrow_up
+                    : Icons.search_outlined,
+              ),
+              label: Text(
+                _showClientSearch ? 'Скрыть поиск' : 'Или выбрать другого',
+              ),
+            ),
+            AnimatedCrossFade(
+              duration: const Duration(milliseconds: 180),
+              crossFadeState: _showClientSearch
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              firstChild: const SizedBox.shrink(),
+              secondChild: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _clientSearch,
+                      autofocus: true,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Поиск клиента',
+                        hintText: 'Имя или номер телефона',
+                        prefixIcon: Icon(Icons.search_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (matches.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'Клиент не найден',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
+                      )
+                    else
+                      for (final client in matches) ...[
+                        _ClientQuickPickTile(
+                          client: client,
+                          selected: client.id == _clientId,
+                          onTap: () => _applyClient(client),
+                        ),
+                        if (client != matches.last) const SizedBox(height: 6),
+                      ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _applyClient(ClientModel client) {
+    setState(() {
+      _clientId = client.id;
+      _clientName.text = client.name;
+      _clientPhone.text = RussianPhoneInputFormatter.format(client.phone ?? '');
+      if (_object.text.trim().isEmpty &&
+          client.objectAddress?.trim().isNotEmpty == true) {
+        _object.text = client.objectAddress!.trim();
+      }
+      _showClientSearch = false;
+      _clientSearch.clear();
+    });
   }
 
   void _hydrate(EstimateDetail detail) {
@@ -556,6 +640,95 @@ class _EstimateFormScreenState extends ConsumerState<EstimateFormScreen> {
       context: context,
       message: message.replaceFirst('Exception: ', ''),
       onOpenPlans: () => context.go('/settings'),
+    );
+  }
+}
+
+class _ClientQuickPickTile extends StatelessWidget {
+  const _ClientQuickPickTile({
+    required this.client,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ClientModel client;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.orangeLight : AppColors.background,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? AppColors.orange : AppColors.border,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: selected ? Colors.white : AppColors.orangeLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  selected ? Icons.check : Icons.person_outline,
+                  size: 18,
+                  color: AppColors.orangeDark,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      client.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    if ((client.phone ?? '').trim().isNotEmpty)
+                      Text(
+                        RussianPhoneInputFormatter.format(client.phone!),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      )
+                    else if ((client.objectAddress ?? '').trim().isNotEmpty)
+                      Text(
+                        client.objectAddress!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Icon(
+                selected ? Icons.check_circle : Icons.chevron_right,
+                color: selected ? AppColors.orangeDark : AppColors.textHint,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -214,11 +214,34 @@ class SubscriptionPlan {
     };
   }
 
-  static String price(String value) {
+  static String price(
+    String value, {
+    String period = SubscriptionBilling.monthly,
+    int teamExtraSeatPacks = 0,
+  }) {
+    final normalized = normalize(value);
+    final amount = SubscriptionBilling.totalPrice(
+      plan: normalized,
+      period: period,
+      teamExtraSeatPacks: teamExtraSeatPacks,
+    );
+    if (normalized == basic) return '0 ₽';
+    final suffix =
+        SubscriptionBilling.normalize(period) == SubscriptionBilling.yearly
+        ? '₽/год'
+        : '₽/мес';
+    return '${SubscriptionBilling.formatAmount(amount)} $suffix';
+  }
+
+  static String monthlyPrice(String value, {int teamExtraSeatPacks = 0}) {
+    return price(value, teamExtraSeatPacks: teamExtraSeatPacks);
+  }
+
+  static int basePrice(String value) {
     return switch (normalize(value)) {
-      pro => '399 ₽/мес',
-      team => '1 490 ₽/мес',
-      _ => '0 ₽',
+      pro => 399,
+      team => 1490,
+      _ => 0,
     };
   }
 
@@ -257,6 +280,43 @@ class SubscriptionPlan {
       ],
     };
   }
+}
+
+class SubscriptionBilling {
+  const SubscriptionBilling._();
+
+  static const monthly = 'monthly';
+  static const yearly = 'yearly';
+  static const teamIncludedSeats = 6;
+  static const seatsPerExtraPack = 6;
+  static const extraSeatPackMonthlyPrice = 990;
+
+  static String normalize(String? value) => value == yearly ? yearly : monthly;
+
+  static int totalPrice({
+    required String plan,
+    String period = monthly,
+    int teamExtraSeatPacks = 0,
+  }) {
+    final baseMonthly = SubscriptionPlan.basePrice(plan);
+    if (baseMonthly == 0) return 0;
+    final packs = SubscriptionPlan.normalize(plan) == SubscriptionPlan.team
+        ? teamExtraSeatPacks.clamp(0, 10).toInt()
+        : 0;
+    final monthlyTotal = baseMonthly + packs * extraSeatPackMonthlyPrice;
+    return normalize(period) == yearly ? monthlyTotal * 10 : monthlyTotal;
+  }
+
+  static String label(String value) =>
+      normalize(value) == yearly ? 'За год' : 'За месяц';
+
+  static String formatAmount(int amount) {
+    final value = amount.toString();
+    return value.replaceAllMapped(RegExp(r'(?=(\d{3})+(?!\d))'), (_) => ' ');
+  }
+
+  static int seatsForPacks(int packs) =>
+      teamIncludedSeats + packs.clamp(0, 10).toInt() * seatsPerExtraPack;
 }
 
 class SubscriptionStatus {

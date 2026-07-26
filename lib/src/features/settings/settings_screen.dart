@@ -401,7 +401,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   update(() => _pdfShowSignatures = next),
               onShowServiceMarkChanged: (next) =>
                   update(() => _pdfShowServiceMark = next),
-              onSave: _savePdfSettings,
+              onSave: () async {
+                final saved = await _savePdfSettings();
+                if (saved && sheetContext.mounted) {
+                  Navigator.of(sheetContext).pop();
+                }
+              },
               onUpgrade: () {
                 Navigator.of(sheetContext).pop();
                 _showTariffSheet(profile);
@@ -584,7 +589,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final plan = profile.effectiveSubscriptionPlan;
     if (profile.subscriptionRenewsAt != null &&
         plan != SubscriptionPlan.basic) {
-      return '${SubscriptionPlan.label(plan)} · до ${formatDate(profile.subscriptionRenewsAt!)}';
+      return '${SubscriptionPlan.label(plan)} · до ${formatSubscriptionExpiry(profile.subscriptionRenewsAt!)}';
     }
     return SubscriptionPlan.label(plan);
   }
@@ -619,21 +624,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       builder: (sheetContext) => _TariffSheet(
         currentPlan:
             profile?.effectiveSubscriptionPlan ?? SubscriptionPlan.basic,
-        onSelect: (plan) {
+        onSelect: (plan, period) {
           Navigator.of(sheetContext).pop();
-          _changePlan(plan);
+          _changePlan(plan, period);
         },
       ),
     );
   }
 
-  Future<void> _changePlan(String plan) async {
+  Future<void> _changePlan(String plan, String period) async {
     if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.pro) {
-      await _showCheckout(SubscriptionPlan.pro);
+      await _showCheckout(SubscriptionPlan.pro, period: period);
       return;
     }
     if (SubscriptionPlan.normalize(plan) == SubscriptionPlan.team) {
-      await _showCheckout(SubscriptionPlan.team);
+      await _showCheckout(SubscriptionPlan.team, period: period);
       return;
     }
     if (!mounted) return;
@@ -646,19 +651,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Future<void> _showCheckout(String plan) async {
+  Future<void> _showCheckout(String plan, {required String period}) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => _MockCheckoutSheet(
         plan: plan,
-        onPay: () {
+        period: period,
+        onPay: (extraSeatPacks) {
           Navigator.of(sheetContext).pop();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Оплата тарифа «${SubscriptionPlan.label(plan)}» появится после подключения платёжного провайдера. Промокоды вводятся отдельно в настройках.',
+                'Выбран тариф «${SubscriptionPlan.label(plan)}» (${SubscriptionBilling.label(period).toLowerCase()}${extraSeatPacks == 0 ? '' : ', +${extraSeatPacks * SubscriptionBilling.seatsPerExtraPack} мест'}). Оплата появится после подключения платёжного провайдера.',
               ),
             ),
           );
@@ -857,8 +863,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _savePdfSettings() async {
-    if (_saving) return;
+  Future<bool> _savePdfSettings() async {
+    if (_saving) return false;
     setState(() => _saving = true);
     try {
       await ref
@@ -873,12 +879,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             footerNote: _pdfFooterNote.text,
           );
       ref.invalidate(profileProvider);
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Настройки PDF сохранены')));
+      return true;
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) return false;
       if (error.toString().contains('Настройки PDF доступны')) {
         showUpgradeSheet(
           context: context,
@@ -886,9 +893,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           onOpenPlans: () =>
               _showTariffSheet(ref.read(profileProvider).asData?.value),
         );
-        return;
+        return false;
       }
       showAppErrorSnackBar(context, error);
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -2910,7 +2918,7 @@ class _PdfSettingsCard extends StatelessWidget {
   final ValueChanged<bool> onShowBrandHeaderChanged;
   final ValueChanged<bool> onShowSignaturesChanged;
   final ValueChanged<bool> onShowServiceMarkChanged;
-  final VoidCallback onSave;
+  final Future<void> Function() onSave;
   final VoidCallback onUpgrade;
 
   @override
@@ -3032,14 +3040,13 @@ class _PdfSettingsCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
+          SizedBox(
+            width: double.infinity,
             child: hasPro
                 ? FilledButton.icon(
-                    onPressed: busy ? null : onSave,
+                    onPressed: busy ? null : () => onSave(),
                     style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 42),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      minimumSize: const Size.fromHeight(48),
                     ),
                     icon: const Icon(Icons.save_outlined),
                     label: const Text('Сохранить PDF'),
@@ -3047,8 +3054,7 @@ class _PdfSettingsCard extends StatelessWidget {
                 : FilledButton.icon(
                     onPressed: onUpgrade,
                     style: FilledButton.styleFrom(
-                      minimumSize: const Size(0, 42),
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      minimumSize: const Size.fromHeight(48),
                     ),
                     icon: const Icon(Icons.workspace_premium),
                     label: const Text('Оформить Профи'),
@@ -4198,7 +4204,7 @@ class _SubscriptionCard extends StatelessWidget {
         if (hasActivePro && renewsAt != null)
           _SubscriptionChip(
             icon: Icons.event_available_outlined,
-            label: 'до ${formatDate(renewsAt)}',
+            label: 'до ${formatSubscriptionExpiry(renewsAt)}',
           ),
         if (expiredPro)
           const _SubscriptionChip(
@@ -4372,6 +4378,13 @@ class _PromoCodeSheetState extends State<_PromoCodeSheet> {
       ),
     );
   }
+}
+
+String formatSubscriptionExpiry(DateTime value) {
+  final day = value.day.toString().padLeft(2, '0');
+  final month = value.month.toString().padLeft(2, '0');
+  if (value.year == DateTime.now().year) return '$day.$month';
+  return '$day.$month.${(value.year % 100).toString().padLeft(2, '0')}';
 }
 
 String _subscriptionSummary({
@@ -4595,11 +4608,18 @@ class _TariffBadge extends StatelessWidget {
   }
 }
 
-class _TariffSheet extends StatelessWidget {
+class _TariffSheet extends StatefulWidget {
   const _TariffSheet({required this.currentPlan, required this.onSelect});
 
   final String currentPlan;
-  final ValueChanged<String> onSelect;
+  final void Function(String plan, String period) onSelect;
+
+  @override
+  State<_TariffSheet> createState() => _TariffSheetState();
+}
+
+class _TariffSheetState extends State<_TariffSheet> {
+  String _period = SubscriptionBilling.monthly;
 
   @override
   Widget build(BuildContext context) {
@@ -4681,6 +4701,13 @@ class _TariffSheet extends StatelessWidget {
                     ],
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: _BillingPeriodSwitch(
+                    period: _period,
+                    onChanged: (value) => setState(() => _period = value),
+                  ),
+                ),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -4692,9 +4719,12 @@ class _TariffSheet extends StatelessWidget {
                           _TariffPlanCard(
                             plan: plan,
                             selected:
-                                SubscriptionPlan.normalize(currentPlan) ==
+                                SubscriptionPlan.normalize(
+                                  widget.currentPlan,
+                                ) ==
                                 SubscriptionPlan.normalize(plan),
-                            onSelect: () => onSelect(plan),
+                            billingPeriod: _period,
+                            onSelect: () => widget.onSelect(plan, _period),
                           ),
                           if (plan != SubscriptionPlan.values.last)
                             const SizedBox(height: 10),
@@ -4705,6 +4735,97 @@ class _TariffSheet extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BillingPeriodSwitch extends StatelessWidget {
+  const _BillingPeriodSwitch({required this.period, required this.onChanged});
+
+  final String period;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _BillingPeriodOption(
+              label: 'Помесячно',
+              selected: period == SubscriptionBilling.monthly,
+              onTap: () => onChanged(SubscriptionBilling.monthly),
+            ),
+          ),
+          Expanded(
+            child: _BillingPeriodOption(
+              label: 'За год',
+              badge: '2 месяца в подарок',
+              selected: period == SubscriptionBilling.yearly,
+              onTap: () => onChanged(SubscriptionBilling.yearly),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BillingPeriodOption extends StatelessWidget {
+  const _BillingPeriodOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.badge,
+  });
+
+  final String label;
+  final String? badge;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.graphite : Colors.transparent,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.black,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 13,
+                ),
+              ),
+              if (badge != null)
+                Text(
+                  badge!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? AppColors.orange : AppColors.success,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -4755,14 +4876,33 @@ class _TariffSheetDragHandleState extends State<_TariffSheetDragHandle> {
   }
 }
 
-class _MockCheckoutSheet extends StatelessWidget {
-  const _MockCheckoutSheet({required this.plan, required this.onPay});
+class _MockCheckoutSheet extends StatefulWidget {
+  const _MockCheckoutSheet({
+    required this.plan,
+    required this.period,
+    required this.onPay,
+  });
 
   final String plan;
-  final VoidCallback onPay;
+  final String period;
+  final ValueChanged<int> onPay;
+
+  @override
+  State<_MockCheckoutSheet> createState() => _MockCheckoutSheetState();
+}
+
+class _MockCheckoutSheetState extends State<_MockCheckoutSheet> {
+  int _extraSeatPacks = 0;
 
   @override
   Widget build(BuildContext context) {
+    final isTeam =
+        SubscriptionPlan.normalize(widget.plan) == SubscriptionPlan.team;
+    final price = SubscriptionPlan.price(
+      widget.plan,
+      period: widget.period,
+      teamExtraSeatPacks: _extraSeatPacks,
+    );
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
@@ -4810,7 +4950,7 @@ class _MockCheckoutSheet extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            SubscriptionPlan.label(plan),
+                            SubscriptionPlan.label(widget.plan),
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w900,
@@ -4827,7 +4967,7 @@ class _MockCheckoutSheet extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      SubscriptionPlan.price(plan),
+                      price,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
@@ -4836,6 +4976,14 @@ class _MockCheckoutSheet extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
+                if (isTeam) ...[
+                  _TeamSeatPackSelector(
+                    packs: _extraSeatPacks,
+                    onChanged: (value) =>
+                        setState(() => _extraSeatPacks = value),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -4851,7 +4999,9 @@ class _MockCheckoutSheet extends StatelessWidget {
                         style: TextStyle(fontWeight: FontWeight.w900),
                       ),
                       const SizedBox(height: 10),
-                      for (final feature in SubscriptionPlan.features(plan))
+                      for (final feature in SubscriptionPlan.features(
+                        widget.plan,
+                      ))
                         Padding(
                           padding: const EdgeInsets.only(bottom: 7),
                           child: Row(
@@ -4897,7 +5047,7 @@ class _MockCheckoutSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Сейчас деньги не списываются. Кнопка ниже только меняет статус подписки, чтобы можно было проверить ограничения и истечение срока.',
+                  'Сейчас деньги не списываются: здесь можно проверить состав заказа и цену. Подключение тарифа появится вместе с платёжным провайдером.',
                   style: TextStyle(
                     color: AppColors.textSecondary,
                     height: 1.35,
@@ -4905,9 +5055,9 @@ class _MockCheckoutSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 FilledButton.icon(
-                  onPressed: onPay,
+                  onPressed: () => widget.onPay(_extraSeatPacks),
                   icon: const Icon(Icons.lock_open_outlined),
-                  label: const Text('Оплатить тестово'),
+                  label: const Text('Продолжить к оплате'),
                 ),
                 const SizedBox(height: 8),
                 TextButton(
@@ -4916,6 +5066,115 @@ class _MockCheckoutSheet extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TeamSeatPackSelector extends StatelessWidget {
+  const _TeamSeatPackSelector({required this.packs, required this.onChanged});
+
+  final int packs;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final seats = SubscriptionBilling.seatsForPacks(packs);
+    final surcharge = packs * SubscriptionBilling.extraSeatPackMonthlyPrice;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.orangeLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Места для бригады',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'В тариф включено 6 мастеров. Каждый пакет добавляет ещё 6 мест за 990 ₽/мес.',
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _SeatStepperButton(
+                icon: Icons.remove,
+                enabled: packs > 0,
+                onTap: () => onChanged(packs - 1),
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '$seats мест',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    Text(
+                      surcharge == 0
+                          ? 'без доплаты'
+                          : '+${SubscriptionBilling.formatAmount(surcharge)} ₽/мес',
+                      style: const TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _SeatStepperButton(
+                icon: Icons.add,
+                enabled: packs < 10,
+                onTap: () => onChanged(packs + 1),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeatStepperButton extends StatelessWidget {
+  const _SeatStepperButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: enabled ? AppColors.card : AppColors.background,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: enabled ? onTap : null,
+        child: SizedBox(
+          width: 42,
+          height: 42,
+          child: Icon(
+            icon,
+            color: enabled ? AppColors.orangeDark : AppColors.textHint,
           ),
         ),
       ),
@@ -4997,11 +5256,13 @@ class _TariffPlanCard extends StatelessWidget {
   const _TariffPlanCard({
     required this.plan,
     required this.selected,
+    required this.billingPeriod,
     required this.onSelect,
   });
 
   final String plan;
   final bool selected;
+  final String billingPeriod;
   final VoidCallback onSelect;
 
   @override
@@ -5069,7 +5330,7 @@ class _TariffPlanCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  SubscriptionPlan.price(plan),
+                  SubscriptionPlan.price(plan, period: billingPeriod),
                   style: const TextStyle(fontWeight: FontWeight.w900),
                 ),
               ],
@@ -5081,6 +5342,20 @@ class _TariffPlanCard extends StatelessWidget {
                 const SizedBox(height: 6),
             ],
             const SizedBox(height: 12),
+            if (SubscriptionPlan.normalize(plan) != SubscriptionPlan.basic)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  billingPeriod == SubscriptionBilling.yearly
+                      ? 'Годовая оплата: экономия двух месяцев'
+                      : 'Можно перейти на годовую оплату и сэкономить два месяца',
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
             SizedBox(
               width: double.infinity,
               child: selected
