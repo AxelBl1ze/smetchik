@@ -1133,6 +1133,10 @@ class SmetchikRepository {
     await _client.rpc('remove_team_member', params: {'p_member_id': memberId});
   }
 
+  Future<void> cancelTeamInvite(String inviteId) async {
+    await _client.rpc('cancel_team_invite', params: {'p_invite_id': inviteId});
+  }
+
   Future<void> acceptTeamInvite(String inviteId) async {
     await _client.rpc('accept_team_invite', params: {'p_invite_id': inviteId});
   }

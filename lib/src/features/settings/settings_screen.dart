@@ -247,6 +247,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onCreate: _createTeam,
               onInvite: _inviteTeamMember,
               onRemove: _removeTeamMember,
+              onCancelInvite: _cancelTeamInvite,
             ),
             _IncomingTeamInvitesCard(
               invites: ref.watch(incomingTeamInvitesProvider),
@@ -655,6 +656,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       await ref.read(repositoryProvider).removeTeamMember(memberId);
       ref.invalidate(teamWorkspaceProvider);
       ref.invalidate(teamMembersProvider);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _cancelTeamInvite(String inviteId) async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(repositoryProvider).cancelTeamInvite(inviteId);
+      ref.invalidate(teamInvitesProvider);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -3796,7 +3813,8 @@ class _SubscriptionCard extends StatelessWidget {
     final displayPlan =
         profile?.effectiveSubscriptionPlan ?? SubscriptionPlan.basic;
     final expiredPro =
-        SubscriptionPlan.normalize(rawPlan) == SubscriptionPlan.pro &&
+        (SubscriptionPlan.normalize(rawPlan) == SubscriptionPlan.pro ||
+            SubscriptionPlan.normalize(rawPlan) == SubscriptionPlan.team) &&
         profile?.hasActivePro != true;
     final hasActivePro = profile?.hasActivePro == true;
     final isPaid = hasActivePro;
@@ -4051,14 +4069,14 @@ String _subscriptionSummary({
   final current = profile;
   if (current == null) return 'Загрузка тарифа';
   if (current.hasActivePro) {
-    return '${SubscriptionPlan.price(SubscriptionPlan.pro)} · безлимитные сметы';
+    return '${SubscriptionPlan.price(current.effectiveSubscriptionPlan)} · безлимитные сметы';
   }
   final limit =
       current.monthlyEstimateLimit ?? ProfileModel.basicMonthlyEstimateLimit;
   final displayedCreated = createdThisMonth > limit ? limit : createdThisMonth;
-  if (SubscriptionPlan.normalize(current.subscriptionPlan) ==
-      SubscriptionPlan.pro) {
-    return 'Профи неактивен · базовый лимит $displayedCreated/$limit';
+  if (SubscriptionPlan.normalize(current.subscriptionPlan) !=
+      SubscriptionPlan.basic) {
+    return '${SubscriptionPlan.label(current.subscriptionPlan)} неактивен · базовый лимит $displayedCreated/$limit';
   }
   return '${SubscriptionPlan.price(SubscriptionPlan.basic)} · $displayedCreated/$limit смет в этом месяце';
 }
@@ -4782,6 +4800,7 @@ class _TeamSubscriptionCard extends StatelessWidget {
     required this.onCreate,
     required this.onInvite,
     required this.onRemove,
+    required this.onCancelInvite,
   });
 
   final ProfileModel? profile;
@@ -4793,6 +4812,7 @@ class _TeamSubscriptionCard extends StatelessWidget {
   final VoidCallback onCreate;
   final VoidCallback onInvite;
   final ValueChanged<String> onRemove;
+  final ValueChanged<String> onCancelInvite;
 
   @override
   Widget build(BuildContext context) {
@@ -5002,13 +5022,22 @@ class _TeamSubscriptionCard extends StatelessWidget {
                           style: const TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ),
-                      const Text(
-                        'ожидает',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.orangeDark,
+                      if (team.isOwner)
+                        IconButton(
+                          onPressed: busy
+                              ? null
+                              : () => onCancelInvite(invite.id),
+                          tooltip: 'Отменить приглашение',
+                          icon: const Icon(Icons.close, size: 18),
+                        )
+                      else
+                        const Text(
+                          'ожидает',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.orangeDark,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

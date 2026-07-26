@@ -2605,6 +2605,25 @@ class _PromoCreateDialogState extends State<_PromoCreateDialog> {
           ),
           const SizedBox(height: 12),
           SegmentedButton<String>(
+            style: ButtonStyle(
+              visualDensity: VisualDensity.standard,
+              backgroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? AppColors.graphite
+                    : AppColors.background,
+              ),
+              foregroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? Colors.white
+                    : AppColors.textSecondary,
+              ),
+              side: const WidgetStatePropertyAll(
+                BorderSide(color: AppColors.border),
+              ),
+              shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
             segments: const [
               ButtonSegment(
                 value: 'pro',

@@ -21,6 +21,9 @@ class AuthController extends ChangeNotifier {
       }
       if (event.event == AuthChangeEvent.signedOut) {
         isPasswordRecovery = false;
+        user = null;
+        notifyListeners();
+        return;
       }
       user = event.session?.user ?? _client!.auth.currentUser;
       notifyListeners();
@@ -39,10 +42,25 @@ class AuthController extends ChangeNotifier {
 
   Future<void> signIn({required String email, required String password}) async {
     await _run(() async {
-      await _client!.auth.signInWithPassword(
+      // Never keep an old session alive while another account is attempting
+      // to enter. This prevents routing with a previous user's profile.
+      if (_client!.auth.currentSession != null) {
+        await _client!.auth.signOut(scope: SignOutScope.local);
+        user = null;
+      }
+      final response = await _client!.auth.signInWithPassword(
         email: email.trim(),
         password: password,
       );
+      final signedInEmail = response.user?.email?.trim().toLowerCase();
+      if (response.session == null ||
+          signedInEmail != email.trim().toLowerCase()) {
+        await _client!.auth.signOut(scope: SignOutScope.local);
+        throw const AuthException(
+          'Не удалось открыть сессию этого аккаунта. Войдите ещё раз.',
+        );
+      }
+      user = response.user;
     });
   }
 
@@ -121,11 +139,22 @@ class AuthController extends ChangeNotifier {
     required String code,
   }) async {
     await _run(() async {
-      await _client!.auth.verifyOTP(
+      if (_client!.auth.currentSession != null) {
+        await _client!.auth.signOut(scope: SignOutScope.local);
+        user = null;
+      }
+      final response = await _client!.auth.verifyOTP(
         email: email.trim(),
         token: code.trim(),
         type: OtpType.email,
       );
+      final signedInEmail = response.user?.email?.trim().toLowerCase();
+      if (response.session == null ||
+          signedInEmail != email.trim().toLowerCase()) {
+        await _client!.auth.signOut(scope: SignOutScope.local);
+        throw const AuthException('Код не открыл сессию указанного аккаунта.');
+      }
+      user = response.user;
     });
   }
 
