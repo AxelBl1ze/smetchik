@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,9 +11,10 @@ import '../../shared/ui.dart';
 /// A public support thread used when the person cannot sign in, for example
 /// after an account block. Access is limited to an unguessable link token.
 class PublicSupportScreen extends StatefulWidget {
-  const PublicSupportScreen({super.key, this.token});
+  const PublicSupportScreen({super.key, this.token, this.emailSent});
 
   final String? token;
+  final bool? emailSent;
 
   @override
   State<PublicSupportScreen> createState() => _PublicSupportScreenState();
@@ -91,8 +93,9 @@ class _PublicSupportScreenState extends State<PublicSupportScreen> {
         'message': message,
       });
       final token = data['token'] as String?;
+      final emailSent = data['emailSent'] == true;
       if (!mounted || token == null || token.isEmpty) return;
-      context.go('/help/$token');
+      context.go('/help/$token?emailSent=${emailSent ? '1' : '0'}');
     } catch (error) {
       if (mounted) setState(() => _error = appErrorMessage(error));
     } finally {
@@ -187,6 +190,13 @@ class _PublicSupportScreenState extends State<PublicSupportScreen> {
           else ...[
             _PublicThreadHeader(ticket: _ticket ?? const {}),
             const SizedBox(height: 14),
+            if (widget.emailSent != null) ...[
+              _PublicDeliveryNote(
+                emailSent: widget.emailSent!,
+                onCopy: _copyThreadLink,
+              ),
+              const SizedBox(height: 14),
+            ],
             SmetchikCard(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -212,6 +222,14 @@ class _PublicSupportScreenState extends State<PublicSupportScreen> {
           const SizedBox(height: 20),
         ],
       ),
+    );
+  }
+
+  Future<void> _copyThreadLink() async {
+    await Clipboard.setData(ClipboardData(text: Uri.base.toString()));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Ссылка на обращение скопирована')),
     );
   }
 }
@@ -508,6 +526,50 @@ class _PublicResolvedNote extends StatelessWidget {
               'Обращение закрыто. Создайте новое, если вопрос появился снова.',
               style: TextStyle(color: AppColors.textSecondary),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PublicDeliveryNote extends StatelessWidget {
+  const _PublicDeliveryNote({required this.emailSent, required this.onCopy});
+
+  final bool emailSent;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = emailSent ? AppColors.success : AppColors.orangeDark;
+    final background = emailSent ? AppColors.successBg : AppColors.orangeLight;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            emailSent ? Icons.mark_email_read_outlined : Icons.link_outlined,
+            color: color,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              emailSent
+                  ? 'Ссылка на эту переписку отправлена на email. По ней можно вернуться к обращению без входа.'
+                  : 'Ссылка не ушла на email. Скопируйте её сейчас: только она даст вернуться к этой переписке без входа.',
+              style: TextStyle(color: color, height: 1.3),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: 'Скопировать ссылку',
+            onPressed: onCopy,
+            icon: Icon(Icons.copy_outlined, color: color),
           ),
         ],
       ),

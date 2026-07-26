@@ -2278,79 +2278,149 @@ class _EvidenceDialog extends StatelessWidget {
     final master = _record(data['master']);
     final client = _record(data['client']);
     final files = _record(data['files']);
-    return AlertDialog(
-      title: const Text('Пакет доказательств'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Выгрузка фиксирует текущую неизменяемую версию документа и данные подписания.',
-                style: TextStyle(color: AppColors.textSecondary, height: 1.35),
+    final details = [
+      ('Мастер', _fallback(master['full_name'], '—')),
+      (
+        'Клиент',
+        _fallback(
+          client['name'],
+          _fallback(estimate['client_signed_name'], '—'),
+        ),
+      ),
+      (
+        'Подписано',
+        _date(
+                  data['estimate'] is Map
+                      ? (data['estimate'] as Map)['client_signed_at']
+                      : null,
+                ) ==
+                null
+            ? '—'
+            : formatDateTime(
+                _date((data['estimate'] as Map)['client_signed_at'])!,
               ),
-              const SizedBox(height: 16),
-              _EvidenceRow(
-                label: 'Мастер',
-                value: _fallback(master['full_name'], '—'),
-              ),
-              _EvidenceRow(
-                label: 'Клиент',
-                value: _fallback(
-                  client['name'],
-                  _fallback(estimate['client_signed_name'], '—'),
-                ),
-              ),
-              _EvidenceRow(
-                label: 'Подписано',
-                value:
-                    _date(
-                          data['estimate'] is Map
-                              ? (data['estimate'] as Map)['client_signed_at']
-                              : null,
-                        ) ==
-                        null
-                    ? '—'
-                    : formatDateTime(
-                        _date((data['estimate'] as Map)['client_signed_at'])!,
+      ),
+      ('Версия', '#${_fallback(estimate['document_version'], '1')}'),
+      if (_fallback(files['signedPdfUrl'], '').isNotEmpty)
+        ('PDF', 'ссылка включена в экспорт'),
+    ];
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(18),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Material(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: AppColors.orangeLight,
+                        borderRadius: BorderRadius.circular(14),
                       ),
-              ),
-              _EvidenceRow(
-                label: 'Версия',
-                value: '#${_fallback(estimate['document_version'], '1')}',
-              ),
-              if (_fallback(files['signedPdfUrl'], '').isNotEmpty)
-                const _EvidenceRow(
-                  label: 'PDF',
-                  value: 'ссылка включена в экспорт',
+                      child: const Icon(
+                        Icons.inventory_2_outlined,
+                        color: AppColors.orangeDark,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Пакет доказательств',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Неизменяемая версия подписанного документа',
+                            style: TextStyle(color: AppColors.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Закрыть',
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
                 ),
-            ],
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(
+                    children: [
+                      for (final detail in details)
+                        _EvidenceRow(label: detail.$1, value: detail.$2),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final download = FilledButton.icon(
+                      onPressed: () {
+                        final title = _fallback(
+                          estimate['object_title'],
+                          'smetchik',
+                        );
+                        downloadAdminJson(
+                          fileName:
+                              'smetchik-evidence-${_fallback(estimate['id'], 'document')}.json',
+                          contents: const JsonEncoder.withIndent(
+                            '  ',
+                          ).convert(data),
+                        );
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Пакет «$title» скачан')),
+                        );
+                      },
+                      icon: const Icon(Icons.download_outlined),
+                      label: const Text('Скачать пакет'),
+                    );
+                    final close = OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Закрыть'),
+                    );
+                    if (constraints.maxWidth < 420) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [download, const SizedBox(height: 8), close],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: close),
+                        const SizedBox(width: 10),
+                        Expanded(child: download),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Закрыть'),
-        ),
-        FilledButton.icon(
-          onPressed: () {
-            final title = _fallback(estimate['object_title'], 'smetchik');
-            downloadAdminJson(
-              fileName:
-                  'smetchik-evidence-${_fallback(estimate['id'], 'document')}.json',
-              contents: const JsonEncoder.withIndent('  ').convert(data),
-            );
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('Пакет «$title» скачан')));
-          },
-          icon: const Icon(Icons.download_outlined),
-          label: const Text('Скачать JSON'),
-        ),
-      ],
     );
   }
 }
@@ -2480,12 +2550,38 @@ class _SupportViewState extends State<_SupportView> {
     if (ticketId == null || body.isEmpty || _sending) return;
     setState(() => _sending = true);
     try {
-      await widget.api.call(
+      final data = await widget.api.call(
         'support_reply',
         body: {'ticketId': ticketId, 'message': body},
       );
+      if (!mounted) return;
+      final now = DateTime.now().toUtc().toIso8601String();
+      setState(() {
+        _messages = [
+          ..._messages,
+          {
+            'id': _fallback(data['messageId'], now),
+            'author_role': 'support',
+            'authorName': 'Поддержка',
+            'body': body,
+            'created_at': now,
+          },
+        ];
+        _tickets = _tickets
+            .map(
+              (ticket) => ticket['id'] == ticketId
+                  ? {
+                      ...ticket,
+                      'status': 'waiting_user',
+                      'last_message_preview': body,
+                      'last_message_at': now,
+                      'updated_at': now,
+                    }
+                  : ticket,
+            )
+            .toList();
+      });
       _reply.clear();
-      await Future.wait([_loadMessages(ticketId), _loadTickets()]);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -2505,7 +2601,16 @@ class _SupportViewState extends State<_SupportView> {
         'support_ticket_status',
         body: {'ticketId': ticketId, 'status': status},
       );
-      await _loadTickets();
+      if (!mounted) return;
+      setState(() {
+        _tickets = _tickets
+            .map(
+              (ticket) => ticket['id'] == ticketId
+                  ? {...ticket, 'status': status}
+                  : ticket,
+            )
+            .toList();
+      });
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(

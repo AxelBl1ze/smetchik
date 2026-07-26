@@ -112,7 +112,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/help/:token',
         pageBuilder: (context, state) => _page(
           state,
-          PublicSupportScreen(token: state.pathParameters['token']),
+          PublicSupportScreen(
+            token: state.pathParameters['token'],
+            emailSent: switch (state.uri.queryParameters['emailSent']) {
+              '1' => true,
+              '0' => false,
+              _ => null,
+            },
+          ),
         ),
       ),
       ShellRoute(
