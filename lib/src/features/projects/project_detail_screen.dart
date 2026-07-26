@@ -1087,6 +1087,88 @@ class _ModeButton extends StatelessWidget {
   );
 }
 
+class _TransactionTypeSwitcher extends StatelessWidget {
+  const _TransactionTypeSwitcher({required this.type, required this.onChanged});
+  final String type;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: AppColors.background,
+      border: Border.all(color: AppColors.border),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: _TransactionTypeButton(
+            active: type == ProjectTransactionType.expense,
+            icon: Icons.north_east,
+            label: 'Расход',
+            onTap: () => onChanged(ProjectTransactionType.expense),
+          ),
+        ),
+        Expanded(
+          child: _TransactionTypeButton(
+            active: type == ProjectTransactionType.income,
+            icon: Icons.south_west,
+            label: 'Поступление',
+            onTap: () => onChanged(ProjectTransactionType.income),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _TransactionTypeButton extends StatelessWidget {
+  const _TransactionTypeButton({
+    required this.active,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+  final bool active;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: active ? AppColors.graphite : Colors.transparent,
+    borderRadius: BorderRadius.circular(12),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: active ? AppColors.orange : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: active ? Colors.white : AppColors.textSecondary,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _LockedMaterialsCard extends StatelessWidget {
   const _LockedMaterialsCard({required this.onUpgrade});
   final VoidCallback onUpgrade;
@@ -1553,22 +1635,9 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(
-                          value: ProjectTransactionType.expense,
-                          label: Text('Расход'),
-                          icon: Icon(Icons.north_east),
-                        ),
-                        ButtonSegment(
-                          value: ProjectTransactionType.income,
-                          label: Text('Поступление'),
-                          icon: Icon(Icons.south_west),
-                        ),
-                      ],
-                      selected: {_type},
-                      onSelectionChanged: (values) {
-                        final type = values.first;
+                    _TransactionTypeSwitcher(
+                      type: _type,
+                      onChanged: (type) {
                         setState(() {
                           _type = type;
                           if (!ProjectTransactionCategory.valuesForType(

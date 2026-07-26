@@ -302,25 +302,31 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
-        Container(
-          width: 46,
-          height: 46,
-          padding: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: AppColors.orangeLight,
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.orange, width: 2),
-          ),
-          child: CircleAvatar(
-            backgroundColor: AppColors.orangeLight,
-            foregroundColor: AppColors.orangeDark,
-            backgroundImage: imageUrl == null ? null : NetworkImage(imageUrl!),
-            child: imageUrl == null
-                ? Text(
-                    initials,
-                    style: const TextStyle(fontWeight: FontWeight.w900),
-                  )
-                : null,
+        InkWell(
+          onTap: () => context.go('/settings'),
+          borderRadius: BorderRadius.circular(99),
+          child: Container(
+            width: 46,
+            height: 46,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: AppColors.orangeLight,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.orange, width: 2),
+            ),
+            child: CircleAvatar(
+              backgroundColor: AppColors.orangeLight,
+              foregroundColor: AppColors.orangeDark,
+              backgroundImage: imageUrl == null
+                  ? null
+                  : NetworkImage(imageUrl!),
+              child: imageUrl == null
+                  ? Text(
+                      initials,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    )
+                  : null,
+            ),
           ),
         ),
       ],

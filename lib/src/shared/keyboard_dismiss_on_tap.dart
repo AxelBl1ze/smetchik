@@ -8,9 +8,17 @@ class KeyboardDismissOnTap extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Listener(
       behavior: HitTestBehavior.translucent,
-      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      onPointerDown: (event) {
+        final focus = FocusManager.instance.primaryFocus;
+        final renderObject = focus?.context?.findRenderObject();
+        if (renderObject is RenderBox && renderObject.hasSize) {
+          final origin = renderObject.localToGlobal(Offset.zero);
+          if ((origin & renderObject.size).contains(event.position)) return;
+        }
+        focus?.unfocus();
+      },
       child: child,
     );
   }
