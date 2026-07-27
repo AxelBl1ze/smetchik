@@ -131,9 +131,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/estimates',
+            pageBuilder: (context, state) =>
+                _page(state, const EstimatesScreen()),
+          ),
+          GoRoute(
+            path: '/estimates/client/:clientId',
             pageBuilder: (context, state) => _page(
               state,
-              EstimatesScreen(clientId: state.uri.queryParameters['clientId']),
+              EstimatesScreen(clientId: state.pathParameters['clientId']),
             ),
           ),
           GoRoute(
@@ -296,9 +301,9 @@ Page<void> _page(GoRouterState state, Widget child) {
 
 int _shellIndexForPath(String path) {
   if (path == '/settings' || path.startsWith('/support')) return 4;
+  if (path == '/estimates' || path.startsWith('/estimates/')) return 1;
   return switch (path) {
     '/home' => 0,
-    '/estimates' => 1,
     '/catalog' => 2,
     '/clients' => 3,
     _ => 0,
