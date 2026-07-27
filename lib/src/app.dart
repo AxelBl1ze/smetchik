@@ -12,6 +12,7 @@ import 'features/auth/auth_screen.dart';
 import 'features/catalog/catalog_screen.dart';
 import 'features/clients/client_form_screen.dart';
 import 'features/clients/client_detail_screen.dart';
+import 'features/clients/client_estimates_screen.dart';
 import 'features/clients/clients_screen.dart';
 import 'features/config/config_required_screen.dart';
 import 'features/estimates/client_approval_screen.dart';
@@ -135,13 +136,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 _page(state, const EstimatesScreen()),
           ),
           GoRoute(
-            path: '/estimates/client/:clientId',
-            pageBuilder: (context, state) => _page(
-              state,
-              EstimatesScreen(clientId: state.pathParameters['clientId']),
-            ),
-          ),
-          GoRoute(
             path: '/catalog',
             pageBuilder: (context, state) =>
                 _page(state, const CatalogScreen()),
@@ -173,6 +167,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/clients/new',
         pageBuilder: (context, state) => _page(state, const ClientFormScreen()),
+      ),
+      GoRoute(
+        path: '/clients/:id/estimates',
+        pageBuilder: (context, state) => _page(
+          state,
+          ClientEstimatesScreen(clientId: state.pathParameters['id']!),
+        ),
       ),
       GoRoute(
         path: '/clients/:id/edit',
@@ -301,9 +302,9 @@ Page<void> _page(GoRouterState state, Widget child) {
 
 int _shellIndexForPath(String path) {
   if (path == '/settings' || path.startsWith('/support')) return 4;
-  if (path == '/estimates' || path.startsWith('/estimates/')) return 1;
   return switch (path) {
     '/home' => 0,
+    '/estimates' => 1,
     '/catalog' => 2,
     '/clients' => 3,
     _ => 0,

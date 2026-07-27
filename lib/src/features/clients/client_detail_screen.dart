@@ -82,7 +82,7 @@ class ClientDetailScreen extends ConsumerWidget {
                     ? null
                     : TextButton(
                         onPressed: () => context.push(
-                          '/estimates/client/${Uri.encodeComponent(client.id)}',
+                          '/clients/${Uri.encodeComponent(client.id)}/estimates',
                         ),
                         child: const Text('Все сметы'),
                       ),

@@ -13,9 +13,7 @@ import '../../shared/ui.dart';
 enum _EstimateWorkspace { estimates, projects }
 
 class EstimatesScreen extends ConsumerStatefulWidget {
-  const EstimatesScreen({super.key, this.clientId});
-
-  final String? clientId;
+  const EstimatesScreen({super.key});
 
   @override
   ConsumerState<EstimatesScreen> createState() => _EstimatesScreenState();
@@ -30,8 +28,6 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
     final estimates = ref.watch(estimatesProvider);
     final offlineSync = ref.watch(offlineSyncProvider);
     final isDesktop = MediaQuery.sizeOf(context).width >= 840;
-    final clientId = widget.clientId?.trim();
-    final hasClientFilter = clientId?.isNotEmpty == true;
     final workspace =
         GoRouterState.of(context).uri.queryParameters['tab'] == 'projects'
         ? _EstimateWorkspace.projects
@@ -81,20 +77,12 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
                       maxWidth: 900,
                       children: [
                         ScreenTitle(
-                          title: hasClientFilter ? 'Сметы клиента' : 'Сметы',
-                          subtitle: hasClientFilter
-                              ? 'Только сметы выбранного клиента'
-                              : 'Черновики, отправленные и работы в процессе',
+                          title: 'Сметы',
+                          subtitle:
+                              'Черновики, отправленные и работы в процессе',
                           icon: Icons.receipt_long_outlined,
                           actions: isDesktop
                               ? [
-                                  if (hasClientFilter)
-                                    TextButton.icon(
-                                      onPressed: () => context.go('/estimates'),
-                                      icon: const Icon(Icons.clear),
-                                      label: const Text('Все сметы'),
-                                    ),
-                                  if (hasClientFilter) const SizedBox(width: 8),
                                   SizedBox(
                                     width: 190,
                                     child: FilledButton.icon(
@@ -128,9 +116,6 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
                         estimates.when(
                           data: (items) {
                             final filtered = items.where((estimate) {
-                              final matchesClient =
-                                  !hasClientFilter ||
-                                  estimate.clientId == clientId;
                               final matchesStatus =
                                   _status == 'all' ||
                                   EstimateStatus.normalize(estimate.status) ==
@@ -138,17 +123,14 @@ class _EstimatesScreenState extends ConsumerState<EstimatesScreen> {
                               final haystack =
                                   '${estimate.objectTitle} ${estimate.client?.name ?? ''}'
                                       .toLowerCase();
-                              return matchesClient &&
-                                  matchesStatus &&
-                                  haystack.contains(_query);
+                              return matchesStatus && haystack.contains(_query);
                             }).toList();
                             if (filtered.isEmpty) {
                               return EmptyState(
                                 icon: Icons.file_copy_outlined,
                                 title: 'Сметы не найдены',
-                                body: hasClientFilter
-                                    ? 'У этого клиента пока нет смет.'
-                                    : 'Создайте новую смету или измените фильтр.',
+                                body:
+                                    'Создайте новую смету или измените фильтр.',
                                 action: FilledButton.icon(
                                   onPressed: () =>
                                       context.push('/estimate/new'),
