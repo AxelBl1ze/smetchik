@@ -348,9 +348,9 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Добрый день,',
-                style: TextStyle(color: AppColors.textSecondary),
+              Text(
+                '${_greetingForHour(DateTime.now().hour)},',
+                style: const TextStyle(color: AppColors.textSecondary),
               ),
               Text(
                 name,
@@ -391,6 +391,12 @@ class _Header extends StatelessWidget {
       ],
     );
   }
+}
+
+String _greetingForHour(int hour) {
+  if (hour >= 5 && hour < 11) return 'Доброе утро';
+  if (hour >= 11 && hour < 18) return 'Добрый день';
+  return 'Добрый вечер';
 }
 
 class _StatCard extends StatelessWidget {
