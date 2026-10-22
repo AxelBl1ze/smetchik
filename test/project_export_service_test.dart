@@ -6,6 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:smetchik/src/data/models.dart';
 import 'package:smetchik/src/data/pdf_service.dart';
+import 'package:smetchik/src/data/pdf_templates.dart';
 import 'package:smetchik/src/data/project_export_service.dart';
 
 void main() {
@@ -92,6 +93,56 @@ void main() {
       final directory = Directory('build/test_artifacts')
         ..createSync(recursive: true);
       await File('${directory.path}/project-payments.pdf').writeAsBytes(bytes);
+    }
+  });
+
+  test('creates project reports and price lists for every template', () async {
+    for (final template in SmetaTemplates.values) {
+      final profile = ProfileModel(
+        id: 'test',
+        fullName: 'Илья',
+        currency: 'RUB',
+        subscriptionPlan: SubscriptionPlan.pro,
+        subscriptionRenewsAt: DateTime(2099),
+        pdfTemplate: template.id,
+        pdfAccentColor: template.colors.accent,
+      );
+      final report = await PdfService.buildProjectReportPdf(
+        detail: detail,
+        profile: profile,
+      );
+      final catalog = await PdfService.buildCatalogPdf(
+        items: const [
+          CatalogItemModel(
+            id: '1',
+            category: 'Сантехника',
+            title: 'Разводка труб водоснабжения',
+            unit: 'м',
+            unitPrice: 750,
+            isCustom: true,
+          ),
+          CatalogItemModel(
+            id: '2',
+            category: 'Отделка',
+            title: 'Укладка плитки',
+            unit: 'м²',
+            unitPrice: 2500,
+            isCustom: true,
+          ),
+        ],
+        profile: profile,
+      );
+      expect(report, isNotEmpty, reason: template.id);
+      expect(catalog, isNotEmpty, reason: template.id);
+      if (const bool.fromEnvironment('WRITE_SAMPLE_PDF')) {
+        Directory('build/test_artifacts/pdfs').createSync(recursive: true);
+        File(
+          'build/test_artifacts/pdfs/report-${template.id}.pdf',
+        ).writeAsBytesSync(report);
+        File(
+          'build/test_artifacts/pdfs/catalog-${template.id}.pdf',
+        ).writeAsBytesSync(catalog);
+      }
     }
   });
 

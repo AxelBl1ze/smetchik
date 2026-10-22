@@ -496,6 +496,7 @@ class ProfileModel {
     this.subscriptionStatus = 'active',
     this.subscriptionSource = SubscriptionSource.manual,
     this.subscriptionRenewsAt,
+    this.subscriptionTeamManaged = false,
     this.pdfShowBrandHeader = true,
     this.pdfShowSignatures = true,
     this.pdfShowServiceMark = true,
@@ -527,6 +528,7 @@ class ProfileModel {
   final String subscriptionStatus;
   final String subscriptionSource;
   final DateTime? subscriptionRenewsAt;
+  final bool subscriptionTeamManaged;
   final bool pdfShowBrandHeader;
   final bool pdfShowSignatures;
   final bool pdfShowServiceMark;
@@ -614,6 +616,7 @@ class ProfileModel {
         map['subscription_source'] as String?,
       ),
       subscriptionRenewsAt: asDateOrNull(map['subscription_renews_at']),
+      subscriptionTeamManaged: map['subscription_team_managed'] == true,
       pdfShowBrandHeader: (map['pdf_show_brand_header'] as bool?) ?? true,
       pdfShowSignatures: (map['pdf_show_signatures'] as bool?) ?? true,
       pdfShowServiceMark: (map['pdf_show_service_mark'] as bool?) ?? true,
@@ -646,6 +649,7 @@ class ProfileModel {
     String? subscriptionStatus,
     String? subscriptionSource,
     DateTime? subscriptionRenewsAt,
+    bool? subscriptionTeamManaged,
     bool? pdfShowBrandHeader,
     bool? pdfShowSignatures,
     bool? pdfShowServiceMark,
@@ -674,6 +678,8 @@ class ProfileModel {
       subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
       subscriptionSource: subscriptionSource ?? this.subscriptionSource,
       subscriptionRenewsAt: subscriptionRenewsAt ?? this.subscriptionRenewsAt,
+      subscriptionTeamManaged:
+          subscriptionTeamManaged ?? this.subscriptionTeamManaged,
       pdfShowBrandHeader: pdfShowBrandHeader ?? this.pdfShowBrandHeader,
       pdfShowSignatures: pdfShowSignatures ?? this.pdfShowSignatures,
       pdfShowServiceMark: pdfShowServiceMark ?? this.pdfShowServiceMark,

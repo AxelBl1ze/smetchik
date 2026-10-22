@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/app_theme.dart';
 import 'feature_tour_overlay.dart';
+import 'subscription_notice.dart';
 
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.selectedIndex, required this.child});
@@ -70,7 +71,14 @@ class AppShell extends StatelessWidget {
 
   Widget _mobileShell(BuildContext context) {
     return Scaffold(
-      body: SafeArea(child: child),
+      body: SafeArea(
+        child: Column(
+          children: [
+            const SubscriptionNotice(),
+            Expanded(child: child),
+          ],
+        ),
+      ),
       bottomNavigationBar: _FloatingCapsuleNavBar(
         selectedIndex: selectedIndex,
         labels: _mobileLabels,
@@ -161,6 +169,7 @@ class AppShell extends StatelessWidget {
                 ),
               ),
             ),
+            const SubscriptionNotice(),
             Expanded(
               child: Align(
                 alignment: Alignment.topCenter,

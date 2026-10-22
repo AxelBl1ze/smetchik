@@ -128,6 +128,8 @@ class SmetchikRepository {
           .maybeSingle();
       if (data == null) return null;
       final map = Map<String, dynamic>.from(data);
+      final access = await _client.rpc('subscription_access');
+      if (access is Map) map.addAll(Map<String, dynamic>.from(access));
       await _localCache.write(_cacheKey('profile'), map);
       return _profileFromMap(map);
     } catch (_) {

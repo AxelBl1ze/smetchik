@@ -48,6 +48,8 @@ dependencies:
   url_launcher: ^6.3.2
   excel_plus: ^0.0.4
   web: ^1.1.1
+  flutter_local_notifications: ^22.0.0
+  timezone: ^0.11.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

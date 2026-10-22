@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_config.dart';
+import 'subscription_notifications.dart';
 
 final authControllerProvider = ChangeNotifierProvider<AuthController>((ref) {
   return AuthController();
@@ -24,6 +25,7 @@ class AuthController extends ChangeNotifier {
         isPasswordRecovery = true;
       }
       if (event.event == AuthChangeEvent.signedOut) {
+        unawaited(SubscriptionNotifications.instance.sync(null, () {}));
         isPasswordRecovery = false;
         user = null;
         _acceptIncomingSessions = false;
@@ -318,6 +320,7 @@ class AuthController extends ChangeNotifier {
   }
 
   Future<void> _clearLocalSession() async {
+    unawaited(SubscriptionNotifications.instance.sync(null, () {}));
     _expectedEmail = null;
     _acceptIncomingSessions = false;
     _ignoringAuthEvents = true;

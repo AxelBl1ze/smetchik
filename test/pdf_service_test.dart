@@ -75,12 +75,13 @@ void main() {
             ? SubscriptionPlan.pro
             : SubscriptionPlan.basic,
         subscriptionStatus: SubscriptionStatus.active,
-        subscriptionRenewsAt: template.isPremium ? DateTime(2026, 8, 10) : null,
+        subscriptionRenewsAt: template.isPremium ? DateTime(2099) : null,
         pdfTemplate: template.id,
         pdfAccentColor: template.colors.accent,
         pdfPaymentTerms: '50% предоплата, остаток после приёмки.',
         pdfFooterNote: 'Смета действует 7 дней.',
       );
+      expect(profile.hasActivePro, template.isPremium, reason: template.id);
 
       final bytes = await PdfService.buildEstimatePdf(
         detail: detail,
@@ -90,7 +91,8 @@ void main() {
       expect(bytes.length, greaterThan(1500), reason: template.id);
 
       if (const bool.fromEnvironment('WRITE_SAMPLE_PDF')) {
-        final directory = Directory('tmp/pdfs')..createSync(recursive: true);
+        final directory = Directory('build/test_artifacts/pdfs')
+          ..createSync(recursive: true);
         File(
           '${directory.path}/smeta-${template.id}.pdf',
         ).writeAsBytesSync(bytes);
@@ -101,6 +103,54 @@ void main() {
         profile: profile,
       );
       expect(actBytes.length, greaterThan(1500), reason: 'act-${template.id}');
+      if (const bool.fromEnvironment('WRITE_SAMPLE_PDF')) {
+        File(
+          'build/test_artifacts/pdfs/act-${template.id}.pdf',
+        ).writeAsBytesSync(actBytes);
+      }
+      for (final accent in template.accentChoices.where(
+        (color) => color != template.colors.accent,
+      )) {
+        final bytes = await PdfService.buildEstimatePdf(
+          detail: detail,
+          profile: profile.copyWith(pdfAccentColor: accent),
+        );
+        expect(
+          bytes.length,
+          greaterThan(1500),
+          reason: '${template.id}: $accent',
+        );
+        if (const bool.fromEnvironment('WRITE_SAMPLE_PDF')) {
+          File(
+            'build/test_artifacts/pdfs/variant-${template.id}-${accent.substring(1)}.pdf',
+          ).writeAsBytesSync(bytes);
+        }
+      }
+      final longBytes = await PdfService.buildEstimatePdf(
+        detail: EstimateDetail(
+          estimate: detail.estimate,
+          lines: [
+            for (var i = 0; i < 60; i++)
+              EstimateLineModel(
+                id: '$i',
+                title:
+                    'Монтаж и проверка инженерных коммуникаций, этап $i, включая подготовку рабочего места',
+                unit: 'компл.',
+                quantity: 12,
+                unitPrice: 750,
+                lineTotal: 9000,
+                sortOrder: i,
+              ),
+          ],
+        ),
+        profile: profile,
+      );
+      expect(longBytes, isNotEmpty, reason: 'long-${template.id}');
+      if (const bool.fromEnvironment('WRITE_SAMPLE_PDF')) {
+        File(
+          'build/test_artifacts/pdfs/long-${template.id}.pdf',
+        ).writeAsBytesSync(longBytes);
+      }
     }
 
     final pinkProfile = ProfileModel(
@@ -111,7 +161,7 @@ void main() {
       currency: 'RUB',
       subscriptionPlan: SubscriptionPlan.pro,
       subscriptionStatus: SubscriptionStatus.active,
-      subscriptionRenewsAt: DateTime(2026, 8, 10),
+      subscriptionRenewsAt: DateTime(2099),
       pdfTemplate: SmetaTemplates.brightAccent.id,
       pdfAccentColor: '#D4537E',
       pdfPaymentTerms: '50% предоплата, остаток после приёмки.',
@@ -123,7 +173,8 @@ void main() {
     );
     expect(pinkBytes.length, greaterThan(1500), reason: 'bright-accent-pink');
     if (const bool.fromEnvironment('WRITE_SAMPLE_PDF')) {
-      final directory = Directory('tmp/pdfs')..createSync(recursive: true);
+      final directory = Directory('build/test_artifacts/pdfs')
+        ..createSync(recursive: true);
       File(
         '${directory.path}/smeta-premium_bright_accent-pink.pdf',
       ).writeAsBytesSync(pinkBytes);

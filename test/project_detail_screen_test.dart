@@ -6,6 +6,7 @@ import 'package:smetchik/src/core/app_theme.dart';
 import 'package:smetchik/src/data/models.dart';
 import 'package:smetchik/src/data/repository.dart';
 import 'package:smetchik/src/features/projects/project_detail_screen.dart';
+import 'package:smetchik/src/features/projects/project_payer_field.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -39,6 +40,7 @@ void main() {
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
+      tester.view.resetViewInsets();
     });
 
     await tester.pumpWidget(
@@ -95,6 +97,22 @@ void main() {
       findsOneWidget,
     );
 
+    final payer = find.byType(ProjectPayerField);
+    await tester.ensureVisible(payer);
+    await tester.tap(payer);
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    await tester.pumpAndSettle();
+    expect(tester.getBottomRight(payer).dy, lessThanOrEqualTo(532));
+    await tester.enterText(
+      find.descendant(of: payer, matching: find.byType(TextFormField)),
+      'Джамал',
+    );
+    expect(find.text('Джамал'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Поступление'));
     await tester.tap(find.text('Поступление'));
     await tester.pumpAndSettle();
     expect(find.text(ProjectTransactionCategory.advance), findsOneWidget);

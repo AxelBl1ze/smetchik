@@ -11,6 +11,7 @@ import '../../data/project_export_service.dart';
 import '../../data/project_payment_summary.dart';
 import '../../data/repository.dart';
 import '../../shared/form_sheet.dart';
+import '../../shared/keyboard_form_sheet.dart';
 import '../../shared/smetchik_date_picker.dart';
 import '../../shared/ui.dart';
 import '../../shared/upgrade_sheet.dart';
@@ -1516,177 +1517,127 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
     final editing = widget.transaction != null;
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      padding: EdgeInsets.only(bottom: bottom),
-      child: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          heightFactor: 1,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Container(
-              margin: const EdgeInsets.all(10),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.16),
-                    blurRadius: 28,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ProjectSectionTitle(
-                            icon: _type == ProjectTransactionType.income
-                                ? Icons.add_card_outlined
-                                : Icons.receipt_long_outlined,
-                            title: editing
-                                ? 'Редактировать операцию'
-                                : 'Новая операция',
-                            subtitle: 'Поступление или расход по объекту',
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Закрыть',
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _TransactionTypeSwitcher(
-                      type: _type,
-                      onChanged: (type) {
-                        setState(() {
-                          _type = type;
-                          if (!ProjectTransactionCategory.valuesForType(
-                            type,
-                          ).contains(_category)) {
-                            _category =
-                                ProjectTransactionCategory.defaultForType(type);
-                          }
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _title,
-                      autofocus: !editing,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Что произошло',
-                        hintText: 'Покупка кирпича',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    _TransactionCategoryField(
-                      category: _category,
-                      type: _type,
-                      onChanged: (category) =>
-                          setState(() => _category = category),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _amount,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'Сумма операции',
-                        suffixText: '₽',
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _quantity,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            decoration: const InputDecoration(
-                              labelText: 'Количество',
-                              hintText: 'Необязательно',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _unit,
-                            textCapitalization: TextCapitalization.characters,
-                            decoration: const InputDecoration(
-                              labelText: 'Единица',
-                              hintText: 'шт., м², кг',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    if (_type == ProjectTransactionType.expense) ...[
-                      TextField(
-                        controller: _counterparty,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(
-                          labelText: 'Поставщик / получатель',
-                          hintText: 'Необязательно',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                    ProjectPayerField(
-                      controller: _payer,
-                      names: widget.payerNames,
-                      label: _type == ProjectTransactionType.income
-                          ? 'От кого поступление'
-                          : 'Кто оплатил',
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: _pickDate,
-                      icon: const Icon(Icons.calendar_month_outlined),
-                      label: Text(formatDate(_date)),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _notes,
-                      minLines: 2,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: 'Комментарий',
-                        hintText: 'Необязательно',
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _submit,
-                      icon: const Icon(Icons.save_outlined),
-                      label: Text(editing ? 'Сохранить' : 'Добавить операцию'),
-                    ),
-                  ],
-                ),
-              ),
+    return KeyboardFormSheet(
+      header: _ProjectSectionTitle(
+        icon: _type == ProjectTransactionType.income
+            ? Icons.add_card_outlined
+            : Icons.receipt_long_outlined,
+        title: editing ? 'Редактировать операцию' : 'Новая операция',
+        subtitle: 'Поступление или расход по объекту',
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _TransactionTypeSwitcher(
+            type: _type,
+            onChanged: (type) {
+              setState(() {
+                _type = type;
+                if (!ProjectTransactionCategory.valuesForType(
+                  type,
+                ).contains(_category)) {
+                  _category = ProjectTransactionCategory.defaultForType(type);
+                }
+              });
+            },
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _title,
+            autofocus: !editing,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Что произошло',
+              hintText: 'Покупка кирпича',
             ),
           ),
-        ),
+          const SizedBox(height: 10),
+          _TransactionCategoryField(
+            category: _category,
+            type: _type,
+            onChanged: (category) => setState(() => _category = category),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _amount,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Сумма операции',
+              suffixText: '₽',
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _quantity,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: const InputDecoration(
+                    labelText: 'Количество',
+                    hintText: 'Необязательно',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _unit,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: const InputDecoration(
+                    labelText: 'Единица',
+                    hintText: 'шт., м², кг',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (_type == ProjectTransactionType.expense) ...[
+            TextField(
+              controller: _counterparty,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Поставщик / получатель',
+                hintText: 'Необязательно',
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
+          ProjectPayerField(
+            controller: _payer,
+            names: widget.payerNames,
+            label: _type == ProjectTransactionType.income
+                ? 'От кого поступление'
+                : 'Кто оплатил',
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _pickDate,
+            icon: const Icon(Icons.calendar_month_outlined),
+            label: Text(formatDate(_date)),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _notes,
+            minLines: 2,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Комментарий',
+              hintText: 'Необязательно',
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _submit,
+            icon: const Icon(Icons.save_outlined),
+            label: Text(editing ? 'Сохранить' : 'Добавить операцию'),
+          ),
+        ],
       ),
     );
   }
@@ -1996,54 +1947,9 @@ class _CompactProjectSheet extends StatelessWidget {
   final IconData icon;
   final Widget child;
   @override
-  Widget build(BuildContext context) => SafeArea(
-    top: false,
-    child: AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _ProjectSectionTitle(
-                          icon: icon,
-                          title: title,
-                          subtitle: subtitle,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        tooltip: 'Закрыть',
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  child,
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
+  Widget build(BuildContext context) => KeyboardFormSheet(
+    header: _ProjectSectionTitle(icon: icon, title: title, subtitle: subtitle),
+    child: child,
   );
 }
 

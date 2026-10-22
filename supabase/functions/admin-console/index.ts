@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8';
+import { activeSubscriptionPlan } from './subscription_access.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -178,6 +179,14 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
     : { data: [], error: null };
   if (teams.error) throw teams.error;
   const teamById = new Map((teams.data ?? []).map((team) => [team.id, team]));
+  const ownerIds = [...new Set((teams.data ?? []).map((team) => team.owner_user_id))];
+  const owners = ownerIds.length
+    ? await context.admin.from('profiles')
+      .select('id,subscription_plan,subscription_status,subscription_source,subscription_renews_at')
+      .in('id', ownerIds)
+    : { data: [], error: null };
+  if (owners.error) throw owners.error;
+  const ownerById = new Map((owners.data ?? []).map((owner) => [owner.id, owner]));
   const membershipByUserId = new Map(
     (memberships.data ?? []).map((member) => [member.user_id, member]),
   );
@@ -196,12 +205,15 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
       const profile = byId.get(user.id) ?? {};
       const membership = membershipByUserId.get(user.id);
       const team = membership ? teamById.get(membership.team_id) : null;
-      const teamOwner = team ? byId.get(team.owner_user_id) : null;
+      const teamOwner = team ? ownerById.get(team.owner_user_id) : null;
       const teamManaged = profile.subscription_plan === 'team' || Boolean(membership);
       // A workspace subscription belongs to its owner. Reading the owner's
       // status makes the admin list correct even if an older member profile
       // has not yet been synchronised by the database trigger.
-      const subscription = teamManaged && teamOwner ? teamOwner : profile;
+      const subscription = membership?.role === 'member'
+        ? (teamOwner?.subscription_plan === 'team' ? teamOwner : undefined)
+        : profile;
+      const effectivePlan = activeSubscriptionPlan(subscription);
       return {
         id: user.id,
         email: user.email ?? null,
@@ -209,10 +221,11 @@ async function users(context: AdminContext, body: JsonRecord): Promise<JsonRecor
         fullName: profile.full_name ?? '',
         phone: profile.phone ?? null,
         specialization: profile.specialization ?? null,
-        subscriptionPlan: teamManaged ? 'team' : profile.subscription_plan ?? 'basic',
-        subscriptionStatus: subscription.subscription_status ?? 'active',
-        subscriptionSource: subscription.subscription_source ?? 'manual',
-        subscriptionRenewsAt: subscription.subscription_renews_at ?? null,
+        subscriptionPlan: effectivePlan,
+        subscriptionAssignedPlan: subscription?.subscription_plan ?? 'basic',
+        subscriptionStatus: subscription?.subscription_status ?? 'inactive',
+        subscriptionSource: subscription?.subscription_source ?? 'manual',
+        subscriptionRenewsAt: subscription?.subscription_renews_at ?? null,
         teamManaged,
         team: membership
           ? {

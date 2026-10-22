@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/painting.dart' show Color;
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
@@ -8,6 +9,7 @@ import 'package:printing/printing.dart';
 import 'models.dart';
 import 'project_payment_summary.dart';
 import 'pdf_templates.dart';
+import 'pdf_contrast.dart';
 
 class PdfService {
   static pw.Font? _regular;
@@ -39,7 +41,7 @@ class PdfService {
     doc.addPage(
       pw.MultiPage(
         pageTheme: _pageTheme(render),
-        footer: render.showServiceMark ? _serviceFooter : null,
+        footer: (context) => _documentFooter(context, render),
         build: (context) => [
           _documentHeader(
             render: render,
@@ -84,7 +86,7 @@ class PdfService {
     doc.addPage(
       pw.MultiPage(
         pageTheme: _pageTheme(render),
-        footer: render.showServiceMark ? _serviceFooter : null,
+        footer: (context) => _documentFooter(context, render),
         build: (context) => [
           _documentHeader(
             render: render,
@@ -193,7 +195,7 @@ class PdfService {
     doc.addPage(
       pw.MultiPage(
         pageTheme: _pageTheme(render),
-        footer: render.showServiceMark ? _serviceFooter : null,
+        footer: (context) => _documentFooter(context, render),
         build: (context) {
           final blocks = <pw.Widget>[
             _documentHeader(
@@ -294,7 +296,7 @@ class PdfService {
     doc.addPage(
       pw.MultiPage(
         pageTheme: _formalPageTheme(render),
-        footer: render.showServiceMark ? _serviceFooter : null,
+        footer: (context) => _documentFooter(context, render),
         build: (context) => [
           _documentHeader(
             render: render,
@@ -409,8 +411,15 @@ class PdfService {
     final coverBg = _pdfColor(
       render.template.colors.coverBackground ?? render.template.colors.accent,
     );
-    final coverText = _pdfColor(
-      render.template.colors.coverText ?? render.template.colors.primaryText,
+    final coverText = PdfColor.fromHex(
+      PdfContrast.hex(
+        PdfContrast.on(
+          PdfContrast.color(
+            render.template.colors.coverBackground ??
+                render.template.colors.accent,
+          ),
+        ),
+      ),
     );
     return pw.Container(
       color: coverBg,
@@ -419,7 +428,7 @@ class PdfService {
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          _logoMark(render, large: true, foreground: coverText),
+          _logoMark(render, large: true),
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
@@ -463,11 +472,34 @@ class PdfService {
         ? pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
-              _logoMark(render),
-              pw.SizedBox(height: 10),
-              _headerText(render, title, subtitle, centered: true),
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  if (render.template.features.showLogo) ...[
+                    _logoMark(render),
+                    pw.SizedBox(width: 12),
+                  ],
+                  pw.Expanded(
+                    child: _headerText(render, title, subtitle, centered: true),
+                  ),
+                ],
+              ),
               pw.SizedBox(height: 8),
-              _metaColumn(render, meta, centered: true),
+              pw.Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                alignment: pw.WrapAlignment.center,
+                children: [
+                  for (final value in meta)
+                    pw.Text(
+                      value,
+                      style: pw.TextStyle(
+                        color: render.headerMuted,
+                        fontSize: 9,
+                      ),
+                    ),
+                ],
+              ),
             ],
           )
         : pw.Row(
@@ -484,6 +516,8 @@ class PdfService {
           );
 
     return pw.Container(
+      width: double.infinity,
+      alignment: centered ? pw.Alignment.center : null,
       padding: pw.EdgeInsets.all(render.isStory ? 12 : 16),
       decoration: pw.BoxDecoration(
         color: render.headerSurface,
@@ -553,14 +587,10 @@ class PdfService {
     );
   }
 
-  static pw.Widget _logoMark(
-    _PdfRenderOptions render, {
-    bool large = false,
-    PdfColor? foreground,
-  }) {
+  static pw.Widget _logoMark(_PdfRenderOptions render, {bool large = false}) {
     final size = large ? 64.0 : 38.0;
     final iconSize = large ? 26.0 : 15.0;
-    final color = foreground ?? render.headerText;
+    final color = render.accentText;
     final logoImage = render.logoImage;
     if (logoImage != null) {
       return pw.Container(
@@ -821,22 +851,36 @@ class PdfService {
     ProjectModel project,
   ) {
     final expectedColor = project.expectedProfit >= 0
-        ? render.accent
+        ? render.accentInk
         : PdfColors.red700;
-    return pw.Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        _projectMetric(render, 'Плановая выручка', project.plannedRevenue),
-        _projectMetric(render, 'Получено', project.incomeAmount),
-        _projectMetric(render, 'Потрачено', project.expenseAmount),
-        _projectMetric(
-          render,
-          'Ожидаемая прибыль',
-          project.expectedProfit,
-          valueColor: expectedColor,
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(vertical: 16),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(
+          top: pw.BorderSide(color: render.accent, width: 2),
+          bottom: pw.BorderSide(color: render.border, width: .5),
         ),
-      ],
+      ),
+      child: pw.Row(
+        children: [
+          for (final metric in [
+            ('Плановая выручка', project.plannedRevenue),
+            ('Получено', project.incomeAmount),
+            ('Потрачено', project.expenseAmount),
+            ('Ожидаемая прибыль', project.expectedProfit),
+          ])
+            pw.Expanded(
+              child: _projectMetric(
+                render,
+                metric.$1,
+                metric.$2,
+                valueColor: metric.$1 == 'Ожидаемая прибыль'
+                    ? expectedColor
+                    : null,
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -847,13 +891,7 @@ class PdfService {
     PdfColor? valueColor,
   }) {
     return pw.Container(
-      width: 125,
-      padding: const pw.EdgeInsets.all(10),
-      decoration: pw.BoxDecoration(
-        color: render.surface,
-        borderRadius: pw.BorderRadius.circular(render.radius),
-        border: pw.Border.all(color: render.border),
-      ),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
@@ -880,7 +918,8 @@ class PdfService {
     List<ProjectTransactionModel> transactions,
   ) {
     return pw.TableHelper.fromTextArray(
-      border: _tableBorder(render, grid: true),
+      border: _tableBorder(render),
+      oddRowDecoration: pw.BoxDecoration(color: render.surface),
       headerDecoration: pw.BoxDecoration(color: render.tableHeader),
       headerStyle: _tableHeaderStyle(render).copyWith(fontSize: 8),
       cellStyle: pw.TextStyle(color: render.primaryText, fontSize: 8),
@@ -939,7 +978,8 @@ class PdfService {
   ) {
     final total = groups.fold<double>(0, (sum, group) => sum + group.amount);
     return pw.TableHelper.fromTextArray(
-      border: _tableBorder(render, grid: true),
+      border: _tableBorder(render),
+      oddRowDecoration: pw.BoxDecoration(color: render.surface),
       headerDecoration: pw.BoxDecoration(color: render.tableHeader),
       headerStyle: _tableHeaderStyle(render).copyWith(fontSize: 9),
       cellStyle: pw.TextStyle(color: render.primaryText, fontSize: 9),
@@ -989,13 +1029,13 @@ class PdfService {
         3: const pw.FlexColumnWidth(1),
       },
       headers: detailed
-          ? ['Работа / описание', 'Ед.', 'Цена', 'Сумма']
+          ? ['Работа / описание', 'Кол-во', 'Цена', 'Сумма']
           : ['Работа', 'Кол-во', 'Цена', 'Сумма'],
       data: [
         for (final line in lines)
           [
             line.title,
-            detailed ? line.unit : '${_formatQty(line.quantity)} ${line.unit}',
+            '${_formatQty(line.quantity)} ${line.unit}',
             formatMoney(line.unitPrice),
             formatMoney(line.lineTotal),
           ],
@@ -1152,7 +1192,7 @@ class PdfService {
           pw.Text(
             label,
             style: pw.TextStyle(
-              color: render.accent,
+              color: render.accentInk,
               fontSize: 10,
               fontWeight: pw.FontWeight.bold,
             ),
@@ -1171,7 +1211,7 @@ class PdfService {
     return pw.Text(
       text,
       style: pw.TextStyle(
-        color: render.accent,
+        color: render.accentInk,
         fontSize: 16,
         fontWeight: pw.FontWeight.bold,
       ),
@@ -1225,7 +1265,10 @@ class PdfService {
         children: [
           if (signatureImage != null) ...[
             pw.Container(
-              height: 38,
+              height: 42,
+              width: 136,
+              padding: const pw.EdgeInsets.all(4),
+              decoration: const pw.BoxDecoration(color: PdfColors.white),
               alignment: pw.Alignment.centerLeft,
               child: pw.Image(
                 signatureImage,
@@ -1283,7 +1326,7 @@ class PdfService {
         child: pw.Center(
           child: pw.Text(
             'место печати',
-            style: pw.TextStyle(color: render.accent, fontSize: 10),
+            style: pw.TextStyle(color: render.accentInk, fontSize: 10),
           ),
         ),
       ),
@@ -1378,13 +1421,28 @@ class PdfService {
     );
   }
 
-  static pw.Widget _serviceFooter(pw.Context context) {
+  static pw.Widget _documentFooter(
+    pw.Context context,
+    _PdfRenderOptions render,
+  ) {
     return pw.Container(
-      alignment: pw.Alignment.center,
       margin: const pw.EdgeInsets.only(top: 12),
-      child: pw.Text(
-        'Составлено в Сметчик',
-        style: pw.TextStyle(fontSize: 9, color: PdfColor.fromHex('#888780')),
+      padding: const pw.EdgeInsets.only(top: 8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(top: pw.BorderSide(color: render.border, width: .5)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            render.showServiceMark ? 'Создано в Сметчике' : render.masterName,
+            style: pw.TextStyle(fontSize: 8, color: render.secondaryText),
+          ),
+          pw.Text(
+            '${context.pageNumber} / ${context.pagesCount}',
+            style: pw.TextStyle(fontSize: 8, color: render.secondaryText),
+          ),
+        ],
       ),
     );
   }
@@ -1503,12 +1561,15 @@ class _PdfRenderOptions {
       ? PdfColor.fromHex(template.colors.surface)
       : PdfColor.fromHex(template.colors.background);
   PdfColor get surface => PdfColor.fromHex(template.colors.surface);
-  PdfColor get primaryText => PdfColor.fromHex(template.colors.primaryText);
-  PdfColor get secondaryText => PdfColor.fromHex(template.colors.secondaryText);
+  PdfColor get primaryText =>
+      _readable(template.colors.primaryText, background);
+  PdfColor get secondaryText =>
+      _readable(template.colors.secondaryText, background);
   PdfColor get accent => PdfColor.fromHex(accentHex);
+  PdfColor get accentInk => _readable(accentHex, background);
   PdfColor get border => PdfColor.fromHex(template.colors.border);
 
-  PdfColor get accentText => _isDark(accentHex) ? PdfColors.white : primaryText;
+  PdfColor get accentText => _on(accent);
 
   PdfColor get headerSurface {
     if (template.layout.dividerStyle == 'none') return surface;
@@ -1516,33 +1577,33 @@ class _PdfRenderOptions {
     return accent;
   }
 
-  PdfColor get headerText =>
-      _isDarkColor(headerSurface) ? PdfColors.white : primaryText;
-  PdfColor get headerMuted =>
-      _isDarkColor(headerSurface) ? PdfColors.white : secondaryText;
+  PdfColor get headerText => _on(headerSurface);
+  PdfColor get headerMuted => _on(headerSurface);
   PdfColor get tableHeader =>
       template.layout.dividerStyle == 'none' ? background : accent;
-  PdfColor get tableHeaderText =>
-      _isDarkColor(tableHeader) ? PdfColors.white : primaryText;
+  PdfColor get tableHeaderText => _on(tableHeader);
+
+  static PdfColor _on(PdfColor background) => PdfColor.fromHex(
+    PdfContrast.hex(PdfContrast.on(_flutterColor(background))),
+  );
+  static PdfColor _readable(String hex, PdfColor background) =>
+      PdfColor.fromHex(
+        PdfContrast.hex(
+          PdfContrast.readable(
+            PdfContrast.color(hex),
+            _flutterColor(background),
+          ),
+        ),
+      );
+  static Color _flutterColor(PdfColor color) => PdfContrast.color(
+    '#${(color.red * 255).round().toRadixString(16).padLeft(2, '0')}'
+    '${(color.green * 255).round().toRadixString(16).padLeft(2, '0')}'
+    '${(color.blue * 255).round().toRadixString(16).padLeft(2, '0')}',
+  );
 
   double get radius => switch (template.layout.cornerStyle) {
     'sharp' => 0,
     'pill' => 18,
     _ => 10,
   };
-
-  static bool _isDark(String hex) {
-    final value = hex.replaceFirst('#', '');
-    final red = int.parse(value.substring(0, 2), radix: 16);
-    final green = int.parse(value.substring(2, 4), radix: 16);
-    final blue = int.parse(value.substring(4, 6), radix: 16);
-    return (red * 0.299 + green * 0.587 + blue * 0.114) < 150;
-  }
-
-  static bool _isDarkColor(PdfColor color) {
-    return (color.red * 255 * 0.299 +
-            color.green * 255 * 0.587 +
-            color.blue * 255 * 0.114) <
-        150;
-  }
 }

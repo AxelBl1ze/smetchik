@@ -1293,13 +1293,21 @@ class _AdminUserCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final plan = user['subscriptionPlan']?.toString() ?? 'basic';
     final renewsAt = _date(user['subscriptionRenewsAt']);
+    final activeStatus = [
+      'active',
+      'trialing',
+    ].contains(user['subscriptionStatus']);
     final pro =
-        plan == 'pro' && (renewsAt == null || renewsAt.isAfter(DateTime.now()));
+        plan == 'pro' &&
+        activeStatus &&
+        (renewsAt == null || renewsAt.isAfter(DateTime.now()));
     final team = _record(user['team']);
     final teamManaged = user['teamManaged'] == true || plan == 'team';
     final isTeamOwner = team['role']?.toString() == 'owner';
     final teamActive =
-        teamManaged && (renewsAt == null || renewsAt.isAfter(DateTime.now()));
+        plan == 'team' &&
+        activeStatus &&
+        (renewsAt == null || renewsAt.isAfter(DateTime.now()));
     final paid = pro || teamActive;
     final bannedUntil = _date(user['bannedUntil']);
     final blocked = bannedUntil != null && bannedUntil.isAfter(DateTime.now());
@@ -1421,7 +1429,7 @@ class _AdminUserCard extends StatelessWidget {
                 );
           final status = _PlanPill(
             premium: paid,
-            label: teamManaged
+            label: teamActive
                 ? renewsAt != null
                       ? 'Бригада до ${formatDate(renewsAt)}'
                       : 'Бригада'
@@ -1429,6 +1437,8 @@ class _AdminUserCard extends StatelessWidget {
                 ? 'Профи до ${formatDate(renewsAt)}'
                 : pro
                 ? 'Профи'
+                : teamManaged
+                ? 'Базовый · Бригада неактивна'
                 : 'Базовый',
           );
           final menu = canManage

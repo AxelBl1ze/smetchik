@@ -13,11 +13,13 @@ import '../../core/app_error.dart';
 import '../../core/auth_controller.dart';
 import '../../data/models.dart';
 import '../../data/pdf_templates.dart';
+import '../../data/pdf_contrast.dart';
 import '../../data/repository.dart';
 import '../../shared/russian_phone_input_formatter.dart';
 import '../../shared/specialization_field.dart';
 import '../../shared/ui.dart';
 import '../../shared/upgrade_sheet.dart';
+import '../../shared/pdf_theme_thumbnail.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -41,6 +43,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pdfShowServiceMark = true;
   bool _hydrated = false;
   bool _saving = false;
+  bool _openedPlans = false;
   @override
   void dispose() {
     _name.dispose();
@@ -61,6 +64,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     profile.whenData((value) {
       if (!_hydrated && value != null) {
         _hydrate(value);
+      }
+      final requested =
+          GoRouter.maybeOf(context) != null &&
+          GoRouterState.of(context).uri.queryParameters['plans'] == '1';
+      if (!requested) _openedPlans = false;
+      if (requested && !_openedPlans && value != null) {
+        _openedPlans = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (!mounted) return;
+          await _showTariffSheet(value);
+          if (context.mounted &&
+              GoRouter.maybeOf(context)
+                      ?.routeInformationProvider
+                      .value
+                      .uri
+                      .queryParameters['plans'] ==
+                  '1') {
+            context.go('/settings');
+          }
+        });
       }
     });
 
@@ -409,7 +432,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onShowServiceMarkChanged: (next) =>
                   update(() => _pdfShowServiceMark = next),
               onSave: () async {
-                final saved = await _savePdfSettings();
+                final saving = _savePdfSettings();
+                setSheetState(() {});
+                final saved = await saving;
+                if (sheetContext.mounted) setSheetState(() {});
                 if (saved && sheetContext.mounted) {
                   Navigator.of(sheetContext).pop();
                 }
@@ -1944,25 +1970,28 @@ class _SettingsFeatureSheet extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(26),
-                child: Stack(
-                  children: [
-                    SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(12, 56, 12, 12),
-                      child: child,
-                    ),
-                    Positioned(
-                      top: 4,
-                      right: 4,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: IconButton(
-                          tooltip: 'Закрыть',
-                          onPressed: onClose,
-                          icon: const Icon(Icons.close),
+                child: Material(
+                  color: AppColors.background,
+                  child: Stack(
+                    children: [
+                      SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(12, 56, 12, 12),
+                        child: child,
+                      ),
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: IconButton(
+                            tooltip: 'Закрыть',
+                            onPressed: onClose,
+                            icon: const Icon(Icons.close),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -2952,7 +2981,8 @@ class _PdfSettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPro = profile?.hasActivePro == true;
-    return SmetchikCard(
+    return Padding(
+      padding: const EdgeInsets.all(4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2993,23 +3023,25 @@ class _PdfSettingsCard extends StatelessWidget {
                   ),
                 ],
               );
-              final preview = ListenableBuilder(
-                listenable: Listenable.merge([paymentTerms, footerNote]),
-                builder: (context, _) => _PdfPreviewMock(
-                  template: hasPro ? template : PdfTemplate.classic,
-                  accentColor: hasPro ? accentColor : PdfAccentColor.orange,
-                  showBrandHeader: !hasPro,
-                  showSignatures: !hasPro || showSignatures,
-                  showServiceMark: !hasPro,
-                  paymentTerms: hasPro ? paymentTerms.text : '',
-                  footerNote: hasPro ? footerNote.text : '',
+              final preview = _PdfPreviewDisclosure(
+                child: ListenableBuilder(
+                  listenable: Listenable.merge([paymentTerms, footerNote]),
+                  builder: (context, _) => _PdfPreviewMock(
+                    template: hasPro ? template : PdfTemplate.classic,
+                    accentColor: hasPro ? accentColor : PdfAccentColor.orange,
+                    showBrandHeader: !hasPro,
+                    showSignatures: !hasPro || showSignatures,
+                    showServiceMark: !hasPro,
+                    paymentTerms: hasPro ? paymentTerms.text : '',
+                    footerNote: hasPro ? footerNote.text : '',
+                  ),
                 ),
               );
 
               if (compact) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [preview, const SizedBox(height: 12), controls],
+                  children: [controls, const SizedBox(height: 16), preview],
                 );
               }
 
@@ -3114,22 +3146,23 @@ class _PdfPresetPicker extends StatelessWidget {
       children: [
         const _FieldCaption('Готовые оформления'),
         const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final preset in SmetaTemplates.premiumValues)
-              _PdfPresetChip(
-                preset: preset,
-                selected:
-                    PdfTemplate.normalize(preset.id) ==
-                        PdfTemplate.normalize(selectedTemplate) &&
-                    PdfAccentColor.normalize(preset.colors.accent) ==
-                        PdfAccentColor.normalize(selectedAccentColor),
-                enabled: enabled,
-                onTap: () => onSelected(preset),
-              ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final preset in SmetaTemplates.premiumValues)
+                _PdfPresetChip(
+                  width: (constraints.maxWidth - 16) / 3,
+                  preset: preset,
+                  selected:
+                      PdfTemplate.normalize(preset.id) ==
+                      PdfTemplate.normalize(selectedTemplate),
+                  enabled: enabled,
+                  onTap: () => onSelected(preset),
+                ),
+            ],
+          ),
         ),
       ],
     );
@@ -3142,23 +3175,24 @@ class _PdfPresetChip extends StatelessWidget {
     required this.selected,
     required this.enabled,
     required this.onTap,
+    required this.width,
   });
 
   final SmetaTemplateConfig preset;
   final bool selected;
   final bool enabled;
   final VoidCallback onTap;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
-    final accent = _colorFromHex(preset.colors.accent);
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: enabled ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: 148,
-        padding: const EdgeInsets.all(10),
+        width: width,
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: selected ? AppColors.orangeLight : AppColors.background,
           borderRadius: BorderRadius.circular(16),
@@ -3170,40 +3204,35 @@ class _PdfPresetChip extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(preset.icon, color: Colors.white, size: 18),
-                ),
-                const Spacer(),
-                Icon(
-                  selected ? Icons.check_circle : Icons.circle_outlined,
-                  color: selected ? AppColors.orange : AppColors.textHint,
-                  size: 18,
-                ),
-              ],
+            Center(
+              child: Stack(
+                children: [
+                  PdfThemeThumbnail(template: preset),
+                  if (selected)
+                    const Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Icon(
+                        Icons.check_circle,
+                        color: AppColors.orange,
+                        size: 18,
+                      ),
+                    ),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
-            Text(
-              preset.shortName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-            Text(
-              preset.description,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
+            SizedBox(
+              height: 30,
+              child: Text(
+                preset.shortName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11,
+                  height: 1.3,
+                ),
               ),
             ),
           ],
@@ -3211,6 +3240,35 @@ class _PdfPresetChip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PdfPreviewDisclosure extends StatefulWidget {
+  const _PdfPreviewDisclosure({required this.child});
+  final Widget child;
+  @override
+  State<_PdfPreviewDisclosure> createState() => _PdfPreviewDisclosureState();
+}
+
+class _PdfPreviewDisclosureState extends State<_PdfPreviewDisclosure> {
+  bool _expanded = false;
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      OutlinedButton.icon(
+        onPressed: () => setState(() => _expanded = !_expanded),
+        icon: Icon(_expanded ? Icons.expand_less : Icons.visibility_outlined),
+        label: Text(
+          _expanded ? 'Скрыть предпросмотр' : 'Предпросмотр документа',
+        ),
+      ),
+      if (_expanded)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: RepaintBoundary(child: widget.child),
+        ),
+    ],
+  );
 }
 
 class _PdfColorPicker extends StatelessWidget {
@@ -3339,8 +3397,14 @@ class _PdfPreviewMock extends StatelessWidget {
     final accent = _colorFromHex(accentColor);
     final background = _colorFromHex(config.colors.background);
     final surface = _colorFromHex(config.colors.surface);
-    final primaryText = _colorFromHex(config.colors.primaryText);
-    final secondaryText = _colorFromHex(config.colors.secondaryText);
+    final primaryText = PdfContrast.readable(
+      _colorFromHex(config.colors.primaryText),
+      background,
+    );
+    final secondaryText = PdfContrast.readable(
+      _colorFromHex(config.colors.secondaryText),
+      background,
+    );
     final border = _colorFromHex(config.colors.border);
     final compact =
         config.id == PdfTemplate.storyFormat ||
@@ -3359,10 +3423,7 @@ class _PdfPreviewMock extends StatelessWidget {
     final dark =
         ThemeData.estimateBrightnessForColor(background) == Brightness.dark;
     final headerBg = config.layout.dividerStyle == 'none' ? surface : accent;
-    final headerTextColor =
-        ThemeData.estimateBrightnessForColor(headerBg) == Brightness.dark
-        ? Colors.white
-        : primaryText;
+    final headerTextColor = PdfContrast.on(headerBg);
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -3407,8 +3468,8 @@ class _PdfPreviewMock extends StatelessWidget {
                     child: Text(
                       'Обложка КП · Алексей · 10.07',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: PdfContrast.on(accent),
                         fontWeight: FontWeight.w900,
                       ),
                     ),
@@ -3443,7 +3504,7 @@ class _PdfPreviewMock extends StatelessWidget {
                             Text(
                               'Коммерческое предложение',
                               style: TextStyle(
-                                color: headerTextColor.withValues(alpha: 0.68),
+                                color: headerTextColor,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -3473,9 +3534,7 @@ class _PdfPreviewMock extends StatelessWidget {
                                   Text(
                                     config.shortName,
                                     style: TextStyle(
-                                      color: headerTextColor.withValues(
-                                        alpha: 0.68,
-                                      ),
+                                      color: headerTextColor,
                                       fontSize: 11,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -3486,7 +3545,7 @@ class _PdfPreviewMock extends StatelessWidget {
                             Text(
                               '10.07',
                               style: TextStyle(
-                                color: headerTextColor.withValues(alpha: 0.68),
+                                color: headerTextColor,
                                 fontSize: 11,
                                 fontWeight: FontWeight.w800,
                               ),
@@ -3647,7 +3706,7 @@ class _PdfPreviewMock extends StatelessWidget {
                         child: Text(
                           'место печати',
                           style: TextStyle(
-                            color: accent,
+                            color: PdfContrast.readable(accent, background),
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
                           ),
@@ -3754,10 +3813,7 @@ class _PdfPreviewTotal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground =
-        ThemeData.estimateBrightnessForColor(accent) == Brightness.dark
-        ? Colors.white
-        : AppColors.graphite;
+    final foreground = PdfContrast.on(accent);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -3777,10 +3833,7 @@ class _PdfPreviewTotal extends StatelessWidget {
         children: [
           Text(
             'Итого',
-            style: TextStyle(
-              color: foreground.withValues(alpha: 0.74),
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: foreground, fontWeight: FontWeight.w800),
           ),
           const Spacer(),
           Text(
@@ -3875,7 +3928,7 @@ class _PdfPreviewLine extends StatelessWidget {
             child: Text(
               '$index',
               style: TextStyle(
-                color: accent,
+                color: PdfContrast.readable(accent, surface),
                 fontSize: 11,
                 fontWeight: FontWeight.w900,
               ),
@@ -3965,7 +4018,7 @@ class _PdfPreviewNote extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              color: accent,
+              color: textColor,
               fontSize: 11,
               fontWeight: FontWeight.w900,
             ),
@@ -4008,7 +4061,7 @@ class _PdfSignatureLine extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: textColor.withValues(alpha: 0.62),
+            color: textColor,
             fontSize: 10,
             fontWeight: FontWeight.w700,
           ),
