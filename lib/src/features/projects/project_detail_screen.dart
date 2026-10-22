@@ -8,12 +8,15 @@ import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/pdf_service.dart';
 import '../../data/project_export_service.dart';
+import '../../data/project_payment_summary.dart';
 import '../../data/repository.dart';
 import '../../shared/form_sheet.dart';
 import '../../shared/smetchik_date_picker.dart';
 import '../../shared/ui.dart';
 import '../../shared/upgrade_sheet.dart';
 import 'project_status_widgets.dart';
+import 'project_payer_field.dart';
+import 'project_payment_analytics.dart';
 
 enum _ProjectExportFormat { excel, pdf }
 
@@ -225,7 +228,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             _ProjectFinanceCard(project: value.project),
             const SizedBox(height: 12),
             if (profile.asData?.value?.hasActivePro == true)
-              _ExpenseAnalyticsCard(transactions: value.transactions)
+              ProjectPaymentAnalytics(transactions: value.transactions)
             else
               _LockedAnalyticsCard(onUpgrade: () => context.go('/settings')),
             const SizedBox(height: 16),
@@ -410,7 +413,11 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _ProjectTransactionSheet(transaction: transaction),
+      useSafeArea: true,
+      builder: (context) => _ProjectTransactionSheet(
+        transaction: transaction,
+        payerNames: detail.availablePayerNames,
+      ),
     );
     if (result == null) return;
     setState(() => _busy = true);
@@ -488,7 +495,14 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _MaterialPurchaseSheet(material: material),
+      useSafeArea: true,
+      builder: (_) => _MaterialPurchaseSheet(
+        material: material,
+        transaction: detail.transactions
+            .where((item) => item.id == material.purchaseTransactionId)
+            .firstOrNull,
+        payerNames: detail.availablePayerNames,
+      ),
     );
     if (result == null) return;
     setState(() => _busy = true);
@@ -502,6 +516,7 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             quantity: result.quantity,
             purchasedAt: result.date,
             counterparty: result.counterparty,
+            payerName: result.payerName,
           );
       ref.invalidate(projectDetailProvider(detail.project.id));
       ref.invalidate(projectsProvider);
@@ -673,22 +688,22 @@ class _ProjectFinanceCard extends StatelessWidget {
               final tiles = [
                 _FinanceTile(
                   label: 'Плановая выручка',
-                  value: formatMoney(project.plannedRevenue),
+                  value: formatProjectPayment(project.plannedRevenue),
                   color: AppColors.graphite,
                 ),
                 _FinanceTile(
                   label: 'Получено',
-                  value: formatMoney(project.incomeAmount),
+                  value: formatProjectPayment(project.incomeAmount),
                   color: AppColors.success,
                 ),
                 _FinanceTile(
                   label: 'Потрачено',
-                  value: formatMoney(project.expenseAmount),
+                  value: formatProjectPayment(project.expenseAmount),
                   color: AppColors.danger,
                 ),
                 _FinanceTile(
                   label: 'Фактическая прибыль',
-                  value: formatMoney(project.actualProfit),
+                  value: formatProjectPayment(project.actualProfit),
                   color: actualColor,
                 ),
               ];
@@ -743,7 +758,7 @@ class _ProjectFinanceCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  formatMoney(project.expectedProfit),
+                  formatProjectPayment(project.expectedProfit),
                   style: TextStyle(
                     color: expectedColor,
                     fontWeight: FontWeight.w900,
@@ -799,99 +814,6 @@ class _FinanceTile extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ExpenseAnalyticsCard extends StatelessWidget {
-  const _ExpenseAnalyticsCard({required this.transactions});
-
-  final List<ProjectTransactionModel> transactions;
-
-  @override
-  Widget build(BuildContext context) {
-    final totals = <String, double>{};
-    for (final transaction in transactions.where(
-      (item) => item.type == ProjectTransactionType.expense,
-    )) {
-      totals[transaction.category] =
-          (totals[transaction.category] ?? 0) + transaction.amount;
-    }
-    final total = totals.values.fold<double>(0, (sum, value) => sum + value);
-    final rows = totals.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return SmetchikCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _ProjectSectionTitle(
-            icon: Icons.pie_chart_outline,
-            title: 'Структура расходов',
-            subtitle: 'Аналитика Профи по категориям затрат',
-          ),
-          const SizedBox(height: 12),
-          if (rows.isEmpty)
-            const Text(
-              'Добавьте расходы, чтобы увидеть разбивку.',
-              style: TextStyle(color: AppColors.textSecondary),
-            )
-          else
-            for (final entry in rows.take(5)) ...[
-              _CategoryExpenseRow(
-                category: entry.key,
-                amount: entry.value,
-                total: total,
-              ),
-              const SizedBox(height: 9),
-            ],
-        ],
-      ),
-    );
-  }
-}
-
-class _CategoryExpenseRow extends StatelessWidget {
-  const _CategoryExpenseRow({
-    required this.category,
-    required this.amount,
-    required this.total,
-  });
-
-  final String category;
-  final double amount;
-  final double total;
-
-  @override
-  Widget build(BuildContext context) {
-    final fraction = total == 0 ? 0.0 : amount / total;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                category,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-            Text(
-              formatMoney(amount),
-              style: const TextStyle(fontWeight: FontWeight.w900),
-            ),
-          ],
-        ),
-        const SizedBox(height: 5),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(99),
-          child: LinearProgressIndicator(
-            value: fraction,
-            minHeight: 7,
-            color: AppColors.orange,
-            backgroundColor: AppColors.orangeLight,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -1480,9 +1402,17 @@ class _TransactionCard extends StatelessWidget {
                     fontSize: 12,
                   ),
                 ),
-                if (transaction.counterparty?.isNotEmpty == true)
+                if (!income && transaction.counterparty?.isNotEmpty == true)
                   Text(
                     transaction.counterparty!,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                if (transaction.effectivePayerName != null)
+                  Text(
+                    '${income ? 'От' : 'Оплатил'}: ${transaction.effectivePayerName}',
                     style: const TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 12,
@@ -1495,7 +1425,7 @@ class _TransactionCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${income ? '+' : '−'}${formatMoney(transaction.amount)}',
+                '${income ? '+' : '−'}${formatProjectPayment(transaction.amount)}',
                 style: TextStyle(color: color, fontWeight: FontWeight.w900),
               ),
               IconButton(
@@ -1531,9 +1461,10 @@ class _TransactionCard extends StatelessWidget {
 }
 
 class _ProjectTransactionSheet extends StatefulWidget {
-  const _ProjectTransactionSheet({this.transaction});
+  const _ProjectTransactionSheet({this.transaction, required this.payerNames});
 
   final ProjectTransactionModel? transaction;
+  final List<String> payerNames;
 
   @override
   State<_ProjectTransactionSheet> createState() =>
@@ -1546,6 +1477,7 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
   final _quantity = TextEditingController();
   final _unit = TextEditingController();
   final _counterparty = TextEditingController();
+  final _payer = TextEditingController();
   final _notes = TextEditingController();
   late String _type;
   late String _category;
@@ -1559,12 +1491,13 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
     _title.text = item?.title ?? '';
     _category =
         item?.category ?? ProjectTransactionCategory.defaultForType(_type);
-    _amount.text = item == null ? '' : item.amount.toStringAsFixed(0);
+    _amount.text = item == null ? '' : formatQuantity(item.amount);
     _quantity.text = item?.quantity == null
         ? ''
         : item!.quantity!.toString().replaceFirst(RegExp(r'\.0$'), '');
     _unit.text = item?.unit ?? '';
     _counterparty.text = item?.counterparty ?? '';
+    _payer.text = item?.effectivePayerName ?? '';
     _notes.text = item?.notes ?? '';
     _date = item?.transactionDate ?? DateTime.now();
   }
@@ -1576,6 +1509,7 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
     _quantity.dispose();
     _unit.dispose();
     _counterparty.dispose();
+    _payer.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -1670,7 +1604,9 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
                     const SizedBox(height: 10),
                     TextField(
                       controller: _amount,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Сумма операции',
                         suffixText: '₽',
@@ -1705,13 +1641,23 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    TextField(
-                      controller: _counterparty,
-                      textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
-                        labelText: 'Поставщик / плательщик',
-                        hintText: 'Необязательно',
+                    if (_type == ProjectTransactionType.expense) ...[
+                      TextField(
+                        controller: _counterparty,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: const InputDecoration(
+                          labelText: 'Поставщик / получатель',
+                          hintText: 'Необязательно',
+                        ),
                       ),
+                      const SizedBox(height: 10),
+                    ],
+                    ProjectPayerField(
+                      controller: _payer,
+                      names: widget.payerNames,
+                      label: _type == ProjectTransactionType.income
+                          ? 'От кого поступление'
+                          : 'Кто оплатил',
                     ),
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
@@ -1768,7 +1714,10 @@ class _ProjectTransactionSheetState extends State<_ProjectTransactionSheet> {
         quantity: double.tryParse(_quantity.text.replaceAll(',', '.')),
         unit: _unit.text,
         transactionDate: _date,
-        counterparty: _counterparty.text,
+        counterparty: _type == ProjectTransactionType.expense
+            ? _counterparty.text
+            : null,
+        payerName: _payer.text,
         notes: _notes.text,
       ),
     );
@@ -1907,16 +1856,24 @@ class _MaterialPurchase {
     required this.quantity,
     required this.date,
     this.counterparty,
+    this.payerName,
   });
   final double amount;
   final double quantity;
   final DateTime date;
   final String? counterparty;
+  final String? payerName;
 }
 
 class _MaterialPurchaseSheet extends StatefulWidget {
-  const _MaterialPurchaseSheet({required this.material});
+  const _MaterialPurchaseSheet({
+    required this.material,
+    required this.payerNames,
+    this.transaction,
+  });
   final ProjectMaterialModel material;
+  final List<String> payerNames;
+  final ProjectTransactionModel? transaction;
   @override
   State<_MaterialPurchaseSheet> createState() => _MaterialPurchaseSheetState();
 }
@@ -1925,6 +1882,7 @@ class _MaterialPurchaseSheetState extends State<_MaterialPurchaseSheet> {
   final _amount = TextEditingController();
   final _quantity = TextEditingController();
   final _counterparty = TextEditingController();
+  final _payer = TextEditingController();
   late DateTime _date;
   @override
   void initState() {
@@ -1937,6 +1895,8 @@ class _MaterialPurchaseSheetState extends State<_MaterialPurchaseSheet> {
         .toString()
         .replaceFirst(RegExp(r'\.0$'), '');
     _date = item.purchasedAt ?? DateTime.now();
+    _counterparty.text = widget.transaction?.counterparty ?? '';
+    _payer.text = widget.transaction?.effectivePayerName ?? '';
   }
 
   @override
@@ -1944,6 +1904,7 @@ class _MaterialPurchaseSheetState extends State<_MaterialPurchaseSheet> {
     _amount.dispose();
     _quantity.dispose();
     _counterparty.dispose();
+    _payer.dispose();
     super.dispose();
   }
 
@@ -1988,6 +1949,8 @@ class _MaterialPurchaseSheetState extends State<_MaterialPurchaseSheet> {
           icon: const Icon(Icons.calendar_month_outlined),
           label: Text(formatDate(_date)),
         ),
+        const SizedBox(height: 10),
+        ProjectPayerField(controller: _payer, names: widget.payerNames),
         const SizedBox(height: 16),
         FilledButton.icon(
           onPressed: _submit,
@@ -2016,6 +1979,7 @@ class _MaterialPurchaseSheetState extends State<_MaterialPurchaseSheet> {
       counterparty: _counterparty.text.trim().isEmpty
           ? null
           : _counterparty.text.trim(),
+      payerName: _payer.text.trim(),
     ),
   );
 }

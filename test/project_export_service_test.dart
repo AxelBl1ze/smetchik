@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:excel_plus/excel_plus.dart' as xls;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -39,6 +41,8 @@ void main() {
         amount: 125000,
         quantity: 1000,
         unit: 'шт.',
+        payerName: 'Джамал',
+        counterparty: 'Строймаркет',
         transactionDate: DateTime(2026, 7, 3),
       ),
       ProjectTransactionModel(
@@ -48,6 +52,7 @@ void main() {
         category: 'Оплата',
         title: 'Аванс',
         amount: 400000,
+        payerName: 'Алексей',
         transactionDate: DateTime(2026, 7, 2),
       ),
     ],
@@ -60,8 +65,19 @@ void main() {
     expect(bytes, isNotEmpty);
     expect(
       workbook.tables.keys,
-      containsAll(['Сводка', 'Расходы', 'Поступления']),
+      containsAll(['Сводка', 'Расходы', 'Поступления', 'По плательщикам']),
     );
+    final payments = workbook['По плательщикам'];
+    final expense = payments.rows[3];
+    expect(expense[1]?.value?.toString(), 'Джамал');
+    expect(expense[2]?.value, xls.IntCellValue(125000));
+    expect(expense[3]?.value, xls.IntCellValue(100));
+    expect(expense[4]?.value?.toString(), '03.07.2026');
+    expect(expense[5]?.value?.toString(), 'Кирпич');
+    expect(expense[7]?.value?.toString(), 'Строймаркет');
+    expect(expense[8]?.value, xls.IntCellValue(125000));
+    expect(payments.rows[4][1]?.value?.toString(), 'Алексей');
+    expect(workbook['Расходы'].rows[3][6]?.value?.toString(), 'Джамал');
   });
 
   test('creates PDF project report', () async {
@@ -72,5 +88,45 @@ void main() {
 
     expect(bytes, isNotEmpty);
     expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+    if (const bool.fromEnvironment('CAPTURE_PROJECT_PAYMENTS')) {
+      final directory = Directory('build/test_artifacts')
+        ..createSync(recursive: true);
+      await File('${directory.path}/project-payments.pdf').writeAsBytes(bytes);
+    }
   });
+
+  test(
+    'paginates a project report with many payers and long descriptions',
+    () async {
+      final bytes = await PdfService.buildProjectReportPdf(
+        detail: ProjectDetail(
+          project: project,
+          transactions: [
+            for (var i = 0; i < 90; i++)
+              ProjectTransactionModel(
+                id: '$i',
+                projectId: project.id,
+                type: i % 3 == 0
+                    ? ProjectTransactionType.income
+                    : ProjectTransactionType.expense,
+                category: ProjectTransactionCategory.materials,
+                title:
+                    'Закупка облицовочного кирпича и доставка на строительный участок, этап $i',
+                amount: 125000.50,
+                payerName: 'Александр Константинович Иванов ${i % 8}',
+                counterparty: 'Строймаркет, склад строительных материалов',
+                transactionDate: DateTime(2026, 10, (i % 28) + 1),
+              ),
+          ],
+        ),
+        profile: null,
+      );
+      expect(bytes, isNotEmpty);
+      if (const bool.fromEnvironment('CAPTURE_PROJECT_PAYMENTS')) {
+        await File(
+          'build/test_artifacts/project-payments-long.pdf',
+        ).writeAsBytes(bytes);
+      }
+    },
+  );
 }

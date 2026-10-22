@@ -838,10 +838,17 @@ class SmetchikRepository {
           .eq('project_id', projectId)
           .eq('user_id', _userId)
           .order('created_at', ascending: false);
+      final payerRows = await _client
+          .from('project_payers')
+          .select('name')
+          .eq('project_id', projectId)
+          .eq('user_id', _userId)
+          .order('created_at');
       final data = {
         'project': Map<String, dynamic>.from(projectRow),
         'transactions': _asMaps(transactionRows),
         'materials': _asMaps(materialRows),
+        'payers': _asMaps(payerRows),
       };
       await _localCache.write(_cacheKey('project.$projectId'), data);
       return _projectDetailFromCache(data);
@@ -880,6 +887,11 @@ class SmetchikRepository {
       ).copyWith(incomeAmount: incomeAmount, expenseAmount: expenseAmount),
       transactions: transactions,
       materials: materialRows.map(ProjectMaterialModel.fromMap).toList(),
+      payerNames: (data['payers'] as List? ?? const [])
+          .whereType<Map>()
+          .map((row) => row['name'])
+          .whereType<String>()
+          .toList(),
     );
   }
 
@@ -984,6 +996,7 @@ class SmetchikRepository {
           .split('T')
           .first,
       'counterparty': _blankToNull(draft.counterparty),
+      'payer_name': _blankToNull(draft.payerName),
       'notes': _blankToNull(draft.notes),
     };
     if (transactionId == null) {
@@ -1088,6 +1101,7 @@ class SmetchikRepository {
     required double quantity,
     required DateTime purchasedAt,
     String? counterparty,
+    String? payerName,
   }) async {
     final transaction = ProjectTransactionDraft(
       type: ProjectTransactionType.expense,
@@ -1098,6 +1112,7 @@ class SmetchikRepository {
       unit: material.unit,
       transactionDate: purchasedAt,
       counterparty: counterparty,
+      payerName: payerName,
       notes: material.notes,
     );
     String transactionId = material.purchaseTransactionId ?? '';
@@ -1118,6 +1133,7 @@ class SmetchikRepository {
                 .split('T')
                 .first,
             'counterparty': _blankToNull(transaction.counterparty),
+            'payer_name': _blankToNull(transaction.payerName),
             'notes': _blankToNull(transaction.notes),
           })
           .select('id')

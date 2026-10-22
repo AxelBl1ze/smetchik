@@ -854,6 +854,7 @@ class ProjectTransactionModel {
     this.unit,
     required this.transactionDate,
     this.counterparty,
+    this.payerName,
     this.notes,
   });
 
@@ -867,7 +868,16 @@ class ProjectTransactionModel {
   final String? unit;
   final DateTime transactionDate;
   final String? counterparty;
+  final String? payerName;
   final String? notes;
+
+  String? get effectivePayerName {
+    final value =
+        payerName ??
+        (type == ProjectTransactionType.income ? counterparty : null);
+    final normalized = value?.trim().replaceAll(RegExp(r'\s+'), ' ');
+    return normalized == null || normalized.isEmpty ? null : normalized;
+  }
 
   factory ProjectTransactionModel.fromMap(Map<String, dynamic> map) {
     return ProjectTransactionModel(
@@ -883,6 +893,7 @@ class ProjectTransactionModel {
       unit: map['unit'] as String?,
       transactionDate: asDate(map['transaction_date']),
       counterparty: map['counterparty'] as String?,
+      payerName: map['payer_name'] as String?,
       notes: map['notes'] as String?,
     );
   }
@@ -946,11 +957,25 @@ class ProjectDetail {
     required this.project,
     required this.transactions,
     this.materials = const [],
+    this.payerNames = const [],
   });
 
   final ProjectModel project;
   final List<ProjectTransactionModel> transactions;
   final List<ProjectMaterialModel> materials;
+  final List<String> payerNames;
+
+  List<String> get availablePayerNames {
+    final names = <String, String>{};
+    for (final name in [
+      ...payerNames,
+      ...transactions.map((item) => item.effectivePayerName).nonNulls,
+    ]) {
+      final clean = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+      if (clean.isNotEmpty) names.putIfAbsent(clean.toLowerCase(), () => clean);
+    }
+    return names.values.toList();
+  }
 }
 
 class ProjectDraft {
@@ -985,6 +1010,7 @@ class ProjectTransactionDraft {
     this.unit,
     required this.transactionDate,
     this.counterparty,
+    this.payerName,
     this.notes,
   });
 
@@ -996,6 +1022,7 @@ class ProjectTransactionDraft {
   final String? unit;
   final DateTime transactionDate;
   final String? counterparty;
+  final String? payerName;
   final String? notes;
 }
 

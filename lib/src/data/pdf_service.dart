@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import 'models.dart';
+import 'project_payment_summary.dart';
 import 'pdf_templates.dart';
 
 class PdfService {
@@ -100,6 +101,25 @@ class PdfService {
           _sectionTitle(render, 'Финансовая сводка'),
           pw.SizedBox(height: 8),
           _projectFinanceSummary(render, project),
+          for (final type in [
+            ProjectTransactionType.expense,
+            ProjectTransactionType.income,
+          ]) ...[
+            if (detail.transactions.any((item) => item.type == type)) ...[
+              pw.SizedBox(height: 18),
+              _sectionTitle(
+                render,
+                type == ProjectTransactionType.expense
+                    ? 'Кто оплатил расходы'
+                    : 'От кого поступили средства',
+              ),
+              pw.SizedBox(height: 8),
+              _projectPayersTable(
+                render,
+                groupProjectPayments(detail.transactions, type: type),
+              ),
+            ],
+          ],
           pw.SizedBox(height: 18),
           _sectionTitle(render, 'Расходы'),
           pw.SizedBox(height: 8),
@@ -843,7 +863,7 @@ class PdfService {
           ),
           pw.SizedBox(height: 4),
           pw.Text(
-            formatMoney(value),
+            formatProjectPayment(value),
             style: pw.TextStyle(
               color: valueColor ?? render.primaryText,
               fontSize: 12,
@@ -872,15 +892,17 @@ class PdfService {
         2: pw.Alignment.centerLeft,
         3: pw.Alignment.center,
         4: pw.Alignment.centerLeft,
-        5: pw.Alignment.centerRight,
+        5: pw.Alignment.centerLeft,
+        6: pw.Alignment.centerRight,
       },
       columnWidths: {
         0: const pw.FlexColumnWidth(1.1),
-        1: const pw.FlexColumnWidth(2.4),
+        1: const pw.FlexColumnWidth(2.2),
         2: const pw.FlexColumnWidth(1.45),
         3: const pw.FlexColumnWidth(1),
         4: const pw.FlexColumnWidth(1.45),
-        5: const pw.FlexColumnWidth(1.2),
+        5: const pw.FlexColumnWidth(1.45),
+        6: const pw.FlexColumnWidth(1.2),
       },
       headers: [
         'Дата',
@@ -888,6 +910,7 @@ class PdfService {
         'Категория',
         'Кол-во',
         'Контрагент',
+        'Плательщик',
         'Сумма',
       ],
       data: [
@@ -903,7 +926,35 @@ class PdfService {
             item.counterparty?.trim().isNotEmpty == true
                 ? item.counterparty!.trim()
                 : '—',
-            formatMoney(item.amount),
+            item.effectivePayerName ?? 'Не указан',
+            formatProjectPayment(item.amount),
+          ],
+      ],
+    );
+  }
+
+  static pw.Widget _projectPayersTable(
+    _PdfRenderOptions render,
+    List<ProjectPaymentGroup> groups,
+  ) {
+    final total = groups.fold<double>(0, (sum, group) => sum + group.amount);
+    return pw.TableHelper.fromTextArray(
+      border: _tableBorder(render, grid: true),
+      headerDecoration: pw.BoxDecoration(color: render.tableHeader),
+      headerStyle: _tableHeaderStyle(render).copyWith(fontSize: 9),
+      cellStyle: pw.TextStyle(color: render.primaryText, fontSize: 9),
+      cellPadding: const pw.EdgeInsets.all(6),
+      cellAlignments: {
+        1: pw.Alignment.centerRight,
+        2: pw.Alignment.centerRight,
+      },
+      headers: ['Плательщик', 'Сумма', 'Доля'],
+      data: [
+        for (final group in groups)
+          [
+            group.label,
+            formatProjectPayment(group.amount),
+            '${formatQuantity(group.shareOf(total) * 100)}%',
           ],
       ],
     );
