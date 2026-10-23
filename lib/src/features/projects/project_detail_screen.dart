@@ -228,6 +228,29 @@ class _ProjectDetailScreenState extends ConsumerState<ProjectDetailScreen> {
             const SizedBox(height: 12),
             _ProjectFinanceCard(project: value.project),
             const SizedBox(height: 12),
+            Material(
+              color: AppColors.card,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: AppColors.border),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                leading: const Icon(
+                  Icons.design_services_outlined,
+                  color: AppColors.orangeDark,
+                ),
+                title: const Text(
+                  'Помещения и расчёты',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                subtitle: const Text('Планы и материалы для отделки'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    context.push('/projects/${widget.projectId}/rooms'),
+              ),
+            ),
+            const SizedBox(height: 12),
             if (profile.asData?.value?.hasActivePro == true)
               ProjectPaymentAnalytics(transactions: value.transactions)
             else

@@ -360,6 +360,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.6.4"
+  geometry_kit:
+    dependency: "direct main"
+    description:
+      name: geometry_kit
+      sha256: "162450df95c5cf01f75a560b82af928f82618b61f728517ae6d01cc05625bfb5"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.2.3"
   glob:
     dependency: transitive
     description:

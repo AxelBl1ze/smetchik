@@ -23,6 +23,7 @@ import 'features/home/home_screen.dart';
 import 'features/legal/legal_documents_screen.dart';
 import 'features/projects/project_detail_screen.dart';
 import 'features/projects/project_form_screen.dart';
+import 'features/projects/project_rooms_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/support/support_screen.dart';
 import 'features/support/public_support_screen.dart';
@@ -235,6 +236,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _page(
           state,
           ProjectFormScreen(projectId: state.pathParameters['id']),
+        ),
+      ),
+      GoRoute(
+        path: '/projects/:id/rooms',
+        pageBuilder: (context, state) => _page(
+          state,
+          ProjectRoomsScreen(projectId: state.pathParameters['id']!),
         ),
       ),
       GoRoute(
