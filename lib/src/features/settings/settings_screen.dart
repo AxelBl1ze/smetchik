@@ -20,6 +20,8 @@ import '../../shared/specialization_field.dart';
 import '../../shared/ui.dart';
 import '../../shared/upgrade_sheet.dart';
 import '../../shared/pdf_theme_thumbnail.dart';
+import '../../shared/focus_aware_scroll_view.dart';
+import '../../shared/keyboard_form_sheet.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -92,6 +94,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: profile.when(
         data: (value) => ResponsiveListView(
           maxWidth: 720,
+          physics: const ClampingScrollPhysics(),
           children: [
             _SettingsProfileHeader(
               name: value?.fullName.trim().isNotEmpty == true
@@ -193,7 +196,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 side: const BorderSide(color: AppColors.danger),
               ),
             ),
-            const SizedBox(height: 18),
           ],
         ),
         loading: () => const LoadingPane(),
@@ -748,18 +750,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _inviteTeamMember() async {
-    final controller = TextEditingController();
     final email = await showModalBottomSheet<String>(
       context: context,
       useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (sheetContext) => _TeamInviteSheet(
-        controller: controller,
-        onConfirm: () => Navigator.of(sheetContext).pop(controller.text.trim()),
-      ),
+      builder: (_) => const _TeamInviteSheet(),
     );
-    controller.dispose();
     if (email == null || email.isEmpty) return;
     setState(() => _saving = true);
     try {
@@ -1941,9 +1938,10 @@ class _SettingsFeatureSheet extends StatelessWidget {
     final topClearance = media.padding.top + 24;
     final availableHeight =
         media.size.height - topClearance - media.padding.bottom - keyboard - 20;
-    final maxSheetHeight = availableHeight < media.size.height * 0.86
-        ? availableHeight
-        : media.size.height * 0.86;
+    final maxSheetHeight = math.max(
+      0.0,
+      math.min(availableHeight, media.size.height * 0.86),
+    );
     return Padding(
       padding: EdgeInsets.only(bottom: keyboard),
       child: SafeArea(
@@ -1974,7 +1972,7 @@ class _SettingsFeatureSheet extends StatelessWidget {
                   color: AppColors.background,
                   child: Stack(
                     children: [
-                      SingleChildScrollView(
+                      FocusAwareScrollView(
                         padding: const EdgeInsets.fromLTRB(12, 56, 12, 12),
                         child: child,
                       ),
@@ -4348,117 +4346,57 @@ class _PromoCodeSheetState extends State<_PromoCodeSheet> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, bottom + 16),
-      child: SafeArea(
-        top: true,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: Material(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(24),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            color: AppColors.orangeLight,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(
-                            Icons.confirmation_number_outlined,
-                            color: AppColors.orangeDark,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Активировать промокод',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'Тариф из промокода появится сразу после проверки',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Закрыть',
-                          onPressed: _busy
-                              ? null
-                              : () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    TextField(
-                      controller: _code,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.characters,
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) => _apply(),
-                      decoration: const InputDecoration(
-                        labelText: 'Промокод',
-                        hintText: 'Например, PRO2026',
-                        prefixIcon: Icon(Icons.local_offer_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      'Промокод можно использовать один раз в одном аккаунте.',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        height: 1.35,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _busy ? null : _apply,
-                      icon: _busy
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Icon(Icons.workspace_premium_outlined),
-                      label: const Text('Активировать Профи'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+  Widget build(BuildContext context) => KeyboardFormSheet(
+    closeEnabled: !_busy,
+    maxWidth: 460,
+    header: const _CardTitle(
+      icon: Icons.confirmation_number_outlined,
+      title: 'Активировать промокод',
+      subtitle: 'Тариф из промокода появится сразу после проверки',
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _code,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _apply(),
+          decoration: const InputDecoration(
+            labelText: 'Промокод',
+            hintText: 'Например, PRO2026',
+            prefixIcon: Icon(Icons.local_offer_outlined),
           ),
         ),
-      ),
-    );
-  }
+        const SizedBox(height: 10),
+        const Text(
+          'Промокод можно использовать один раз в одном аккаунте.',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: _busy ? null : _apply,
+          icon: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Icon(Icons.workspace_premium_outlined),
+          label: const Text('Активировать Профи'),
+        ),
+      ],
+    ),
+  );
 }
 
 String formatSubscriptionExpiry(DateTime value) {
@@ -5691,66 +5629,53 @@ class _TeamSubscriptionCard extends StatelessWidget {
   }
 }
 
-class _TeamInviteSheet extends StatelessWidget {
-  const _TeamInviteSheet({required this.controller, required this.onConfirm});
-  final TextEditingController controller;
-  final VoidCallback onConfirm;
+class _TeamInviteSheet extends StatefulWidget {
+  const _TeamInviteSheet();
+
   @override
-  Widget build(BuildContext context) => SafeArea(
-    top: true,
-    child: AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-        decoration: const BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  State<_TeamInviteSheet> createState() => _TeamInviteSheetState();
+}
+
+class _TeamInviteSheetState extends State<_TeamInviteSheet> {
+  final controller = TextEditingController();
+
+  void onConfirm() => Navigator.of(context).pop(controller.text.trim());
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => KeyboardFormSheet(
+    header: const _CardTitle(
+      icon: Icons.person_add_alt_1,
+      title: 'Пригласить мастера',
+      subtitle: 'Приглашение получит мастер с этим email',
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => onConfirm(),
+          decoration: const InputDecoration(
+            labelText: 'Email мастера',
+            prefixIcon: Icon(Icons.mail_outline),
+          ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Пригласить мастера',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'После регистрации на этот email приглашение появится в настройках мастера.',
-              style: TextStyle(color: AppColors.textSecondary, height: 1.3),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Email мастера',
-                prefixIcon: Icon(Icons.mail_outline),
-              ),
-            ),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: onConfirm,
-              icon: const Icon(Icons.person_add_alt_1),
-              label: const Text('Создать приглашение'),
-            ),
-          ],
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: onConfirm,
+          icon: const Icon(Icons.person_add_alt_1),
+          label: const Text('Создать приглашение'),
         ),
-      ),
+      ],
     ),
   );
 }

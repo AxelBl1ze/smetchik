@@ -3,53 +3,28 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
+import 'focus_aware_scroll_view.dart';
 
-/// Ограничил форму видимой областью и сохраняю поле в зоне прокрутки.
+/// Ограничил форму видимой областью над клавиатурой.
 class KeyboardFormSheet extends StatefulWidget {
   const KeyboardFormSheet({
     super.key,
     required this.header,
     required this.child,
+    this.maxWidth = 560,
+    this.closeEnabled = true,
   });
   final Widget header;
   final Widget child;
+  final double maxWidth;
+  final bool closeEnabled;
 
   @override
   State<KeyboardFormSheet> createState() => _KeyboardFormSheetState();
 }
 
-class _KeyboardFormSheetState extends State<KeyboardFormSheet>
-    with WidgetsBindingObserver {
-  final _scroll = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    FocusManager.instance.addListener(_revealField);
-  }
-
-  void _revealField() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final target = FocusManager.instance.primaryFocus?.context;
-      if (target == null || !target.mounted) return;
-      final scrollable = Scrollable.maybeOf(target);
-      if (scrollable?.widget.controller != _scroll) return;
-      Scrollable.ensureVisible(target, alignment: .25);
-    });
-  }
-
-  @override
-  void didChangeMetrics() => _revealField();
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    FocusManager.instance.removeListener(_revealField);
-    _scroll.dispose();
-    super.dispose();
-  }
+class _KeyboardFormSheetState extends State<KeyboardFormSheet> {
+  final _contentKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +32,22 @@ class _KeyboardFormSheetState extends State<KeyboardFormSheet>
     return LayoutBuilder(
       builder: (context, constraints) {
         final height = math.max(0.0, constraints.maxHeight - keyboard - 24);
+        final content = KeyedSubtree(key: _contentKey, child: widget.child);
+        final heading = Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+          child: Row(
+            children: [
+              Expanded(child: widget.header),
+              IconButton(
+                tooltip: 'Закрыть',
+                onPressed: widget.closeEnabled
+                    ? () => Navigator.pop(context)
+                    : null,
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+        );
         return Padding(
           padding: EdgeInsets.only(bottom: keyboard),
           child: SafeArea(
@@ -66,7 +57,7 @@ class _KeyboardFormSheetState extends State<KeyboardFormSheet>
               child: Container(
                 margin: const EdgeInsets.all(8),
                 constraints: BoxConstraints(
-                  maxWidth: 560,
+                  maxWidth: widget.maxWidth,
                   maxHeight: math.min(760, height),
                 ),
                 clipBehavior: Clip.antiAlias,
@@ -77,34 +68,43 @@ class _KeyboardFormSheetState extends State<KeyboardFormSheet>
                 ),
                 child: Material(
                   color: AppColors.card,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-                        child: Row(
+                  child: height < 280
+                      ? FocusAwareScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              heading,
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  4,
+                                  16,
+                                  20,
+                                ),
+                                child: content,
+                              ),
+                            ],
+                          ),
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(child: widget.header),
-                            IconButton(
-                              tooltip: 'Закрыть',
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close),
+                            heading,
+                            Flexible(
+                              child: FocusAwareScrollView(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  4,
+                                  16,
+                                  20,
+                                ),
+                                child: content,
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          controller: _scroll,
-                          keyboardDismissBehavior:
-                              ScrollViewKeyboardDismissBehavior.onDrag,
-                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
-                          child: widget.child,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),

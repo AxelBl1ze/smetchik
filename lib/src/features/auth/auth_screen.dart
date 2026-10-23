@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../shared/focus_aware_scroll_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -78,7 +79,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     return Scaffold(
       body: SafeArea(
         child: Center(
-          child: SingleChildScrollView(
+          child: FocusAwareScrollView(
             child: ScreenPadding(
               maxWidth: isWide ? 1040 : 480,
               child: isWide
@@ -147,7 +148,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           color: AppColors.card,
           borderRadius: BorderRadius.circular(22),
         ),
-        child: SingleChildScrollView(child: content),
+        child: FocusAwareScrollView(child: content),
       );
     }
 

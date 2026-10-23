@@ -9,6 +9,7 @@ import '../../data/models.dart';
 import '../../data/pdf_service.dart';
 import '../../data/repository.dart';
 import '../../shared/form_sheet.dart';
+import '../../shared/keyboard_form_sheet.dart';
 import '../../shared/ui.dart';
 
 const _allCategory = 'Все';
@@ -202,8 +203,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
             if (isEmpty) {
               return bounded(
-                SizedBox(
-                  height: 280,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 280),
                   child: EmptyState(
                     icon: Icons.build_outlined,
                     title: 'Работы не найдены',
@@ -640,112 +641,64 @@ class _CatalogItemEditorSheetState extends State<_CatalogItemEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
     final isNew = widget.item == null;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          heightFactor: 1,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: Container(
-              margin: const EdgeInsets.all(10),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.16),
-                    blurRadius: 28,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _CatalogSheetTitle(
-                            icon: isNew
-                                ? Icons.add_circle_outline
-                                : Icons.edit_outlined,
-                            title: isNew
-                                ? 'Новая услуга'
-                                : 'Редактировать услугу',
-                            subtitle: isNew
-                                ? 'Работа, единица измерения и цена'
-                                : 'Название, раздел и стоимость',
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Закрыть',
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: const Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _title,
-                      autofocus: isNew,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Название',
-                        hintText: 'Монтаж радиатора',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    CategoryPicker(
-                      categories: widget.categories,
-                      selected: _category,
-                      onSelected: (value) => setState(() => _category = value),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _unit,
-                            decoration: const InputDecoration(
-                              labelText: 'Ед. изм.',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: _price,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Цена',
-                              suffixText: '₽',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _submit,
-                      icon: const Icon(Icons.save_outlined),
-                      label: Text(isNew ? 'Добавить услугу' : 'Сохранить'),
-                    ),
-                  ],
-                ),
-              ),
+    return KeyboardFormSheet(
+      header: _CatalogSheetTitle(
+        icon: isNew ? Icons.add_circle_outline : Icons.edit_outlined,
+        title: isNew ? 'Новая услуга' : 'Редактировать услугу',
+        subtitle: isNew
+            ? 'Работа, единица измерения и цена'
+            : 'Название, раздел и стоимость',
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _title,
+            autofocus: isNew,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(
+              labelText: 'Название',
+              hintText: 'Монтаж радиатора',
             ),
           ),
-        ),
+          const SizedBox(height: 12),
+          CategoryPicker(
+            categories: widget.categories,
+            selected: _category,
+            onSelected: (value) => setState(() => _category = value),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _unit,
+                  decoration: const InputDecoration(labelText: 'Ед. изм.'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _price,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Цена',
+                    suffixText: '₽',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: _submit,
+            icon: const Icon(Icons.save_outlined),
+            label: Text(isNew ? 'Добавить услугу' : 'Сохранить'),
+          ),
+        ],
       ),
     );
   }
@@ -785,110 +738,68 @@ class _CategoryEditorSheetState extends State<_CategoryEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          heightFactor: 1,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Container(
-              margin: const EdgeInsets.all(10),
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.16),
-                    blurRadius: 28,
-                    offset: const Offset(0, 12),
-                  ),
-                ],
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 38,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: AppColors.border,
-                          borderRadius: BorderRadius.circular(99),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const _CatalogSheetTitle(
-                      icon: Icons.create_new_folder_outlined,
-                      title: 'Новый раздел',
-                      subtitle: 'Название и иконка для прайс-листа',
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _title,
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.sentences,
-                      textInputAction: TextInputAction.done,
-                      decoration: const InputDecoration(
-                        labelText: 'Название раздела',
-                        hintText: 'Кондиционеры',
-                      ),
-                      onSubmitted: (_) => _submit(),
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'Иконка раздела',
-                      style: TextStyle(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final option in _catalogIconOptions)
-                          _CategoryIconChoice(
-                            option: option,
-                            selected: _iconKey == option.key,
-                            onTap: () => setState(() => _iconKey = option.key),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Отмена'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: _submit,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Создать'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+    return KeyboardFormSheet(
+      header: const _CatalogSheetTitle(
+        icon: Icons.create_new_folder_outlined,
+        title: 'Новый раздел',
+        subtitle: 'Название и иконка для прайс-листа',
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _title,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Название раздела',
+              hintText: 'Кондиционеры',
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Иконка раздела',
+            style: TextStyle(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w900,
             ),
           ),
-        ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final option in _catalogIconOptions)
+                _CategoryIconChoice(
+                  option: option,
+                  selected: _iconKey == option.key,
+                  onTap: () => setState(() => _iconKey = option.key),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Отмена'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: _submit,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Создать'),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

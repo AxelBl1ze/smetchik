@@ -11,6 +11,7 @@ import '../../data/repository.dart';
 import '../../shared/address_autocomplete_field.dart';
 import '../../shared/russian_phone_input_formatter.dart';
 import '../../shared/form_sheet.dart';
+import '../../shared/focus_aware_scroll_view.dart';
 import '../../shared/ui.dart';
 import '../../shared/upgrade_sheet.dart';
 
@@ -774,99 +775,104 @@ class _AddWorkSheetState extends State<_AddWorkSheet> {
           }).toList();
     final rows = _buildRows(filtered);
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.82,
-      minChildSize: 0.48,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Добавить работу',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SafeArea(
+        child: DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: .82,
+          minChildSize: .48,
+          maxChildSize: .95,
+          builder: (context, scrollController) => Container(
+            decoration: const BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: FocusAwareViewport(
+              child: CustomScrollView(
+                controller: scrollController,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 10),
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.border,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Добавить работу',
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(fontWeight: FontWeight.w900),
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: _closing ? null : _selectCustom,
+                                icon: const Icon(Icons.edit_outlined, size: 18),
+                                label: const Text('Своя'),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                          child: TextField(
+                            controller: _search,
+                            autofocus: widget.catalog.length > 18,
+                            textInputAction: TextInputAction.search,
+                            decoration: InputDecoration(
+                              hintText: 'Поиск по работам',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _query.isEmpty
+                                  ? null
+                                  : IconButton(
+                                      tooltip: 'Очистить',
+                                      onPressed: _closing
+                                          ? null
+                                          : () {
+                                              _search.clear();
+                                              setState(() => _query = '');
+                                            },
+                                      icon: const Icon(Icons.close),
+                                    ),
+                            ),
+                            onChanged: (value) =>
+                                setState(() => _query = value),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (filtered.isEmpty)
+                    SliverToBoxAdapter(
+                      child: EmptyState(
+                        icon: Icons.search_off,
+                        title: 'Ничего не найдено',
+                        body:
+                            'Попробуйте другой запрос или добавьте свою работу.',
+                        action: FilledButton.icon(
+                          onPressed: _closing ? null : _selectCustom,
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Своя работа'),
                         ),
                       ),
-                    ),
-                    TextButton.icon(
-                      onPressed: _closing ? null : _selectCustom,
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                      label: const Text('Своя'),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                child: TextField(
-                  controller: _search,
-                  autofocus: widget.catalog.length > 18,
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Поиск по работам',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _query.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Очистить',
-                            onPressed: _closing
-                                ? null
-                                : () {
-                                    _search.clear();
-                                    setState(() => _query = '');
-                                  },
-                            icon: const Icon(Icons.close),
-                          ),
-                  ),
-                  onChanged: (value) => setState(() => _query = value),
-                ),
-              ),
-              Expanded(
-                child: filtered.isEmpty
-                    ? ListView(
-                        controller: scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                        children: [
-                          EmptyState(
-                            icon: Icons.search_off,
-                            title: 'Ничего не найдено',
-                            body:
-                                'Попробуйте другой запрос или добавьте свою работу.',
-                            action: FilledButton.icon(
-                              onPressed: _closing ? null : _selectCustom,
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text('Своя работа'),
-                            ),
-                          ),
-                        ],
-                      )
-                    : ListView.builder(
-                        controller: scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-                        itemCount: rows.length,
-                        itemBuilder: (context, index) {
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
                           final row = rows[index];
                           if (row.category != null) {
                             return Padding(
@@ -939,10 +945,12 @@ class _AddWorkSheetState extends State<_AddWorkSheet> {
                               ),
                             ),
                           );
-                        },
+                        }, childCount: rows.length),
                       ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

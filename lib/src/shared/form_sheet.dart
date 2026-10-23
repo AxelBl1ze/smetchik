@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/app_theme.dart';
+import 'keyboard_form_sheet.dart';
 
 /// Красивый bottom sheet для форм вместо стандартных AlertDialog.
 Future<bool?> showFormSheet({
@@ -15,6 +16,8 @@ Future<bool?> showFormSheet({
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
+    useRootNavigator: true,
+    useSafeArea: true,
     isDismissible: isDismissible,
     backgroundColor: Colors.transparent,
     builder: (context) => _FormSheet(
@@ -64,102 +67,60 @@ class _FormSheet extends StatelessWidget {
   final bool destructive;
 
   @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  Widget build(BuildContext context) => KeyboardFormSheet(
+    header: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
         ),
-        child: SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 10),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          subtitle!,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 13,
-                            height: 1.35,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var i = 0; i < fields.length; i++) ...[
-                        if (i > 0) const SizedBox(height: 12),
-                        fields[i],
-                      ],
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Отмена'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton(
-                          style: destructive
-                              ? FilledButton.styleFrom(
-                                  backgroundColor: AppColors.danger,
-                                )
-                              : null,
-                          onPressed: () => Navigator.pop(context, true),
-                          child: Text(confirmLabel),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+              height: 1.35,
             ),
           ),
+        ],
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < fields.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          fields[i],
+        ],
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Отмена'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton(
+                style: destructive
+                    ? FilledButton.styleFrom(backgroundColor: AppColors.danger)
+                    : null,
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(confirmLabel),
+              ),
+            ),
+          ],
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
 
 class _ConfirmSheet extends StatelessWidget {

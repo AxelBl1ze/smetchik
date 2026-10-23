@@ -4,6 +4,7 @@ import '../core/app_error.dart';
 
 import '../core/app_theme.dart';
 import '../data/models.dart';
+import 'focus_aware_scroll_view.dart';
 
 class ScreenPadding extends StatelessWidget {
   const ScreenPadding({super.key, required this.child, this.maxWidth = 460});
@@ -47,11 +48,13 @@ class ResponsiveListView extends StatelessWidget {
     required this.children,
     this.maxWidth = 760,
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 20),
+    this.physics,
   });
 
   final List<Widget> children;
   final double maxWidth;
   final EdgeInsetsGeometry padding;
+  final ScrollPhysics? physics;
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +64,8 @@ class ResponsiveListView extends StatelessWidget {
         final minHeight = constraints.maxHeight.isFinite
             ? constraints.maxHeight
             : 0.0;
-        return SingleChildScrollView(
+        return FocusAwareScrollView(
+          physics: physics,
           padding: EdgeInsets.zero,
           child: Center(
             child: SizedBox(

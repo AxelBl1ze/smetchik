@@ -16,6 +16,7 @@ import 'package:smetchik/src/data/pdf_templates.dart';
 import 'package:smetchik/src/data/repository.dart';
 import 'package:smetchik/src/features/settings/settings_screen.dart';
 import 'package:smetchik/src/shared/app_shell.dart';
+import 'package:smetchik/src/shared/ui.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
@@ -84,6 +85,129 @@ void main() {
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
+
+  testWidgets(
+    'settings do not overscroll when they fit and stay scrollable on short screens',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetPhysicalSize();
+      });
+      for (final size in [const Size(1440, 1200), const Size(320, 568)]) {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(
+          ProviderScope(
+            key: UniqueKey(),
+            overrides: [
+              profileProvider.overrideWith(
+                (_) async => const ProfileModel(
+                  id: 'test',
+                  fullName: 'Мастер',
+                  currency: 'RUB',
+                ),
+              ),
+              estimatesProvider.overrideWith((_) async => <EstimateModel>[]),
+            ],
+            child: MaterialApp(
+              theme: buildAppTheme(),
+              home: const AppShell(selectedIndex: 4, child: SettingsScreen()),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final list = find.byType(ResponsiveListView);
+        final scroll = tester.state<ScrollableState>(
+          find.descendant(of: list, matching: find.byType(Scrollable)).first,
+        );
+        final fits = size.width > 840;
+        expect(scroll.position.maxScrollExtent, fits ? 0 : greaterThan(0));
+        await tester.drag(list, const Offset(0, 200));
+        await tester.pumpAndSettle();
+        expect(scroll.position.pixels, 0);
+        await tester.drag(list, const Offset(0, -250));
+        await tester.pumpAndSettle();
+        expect(scroll.position.pixels, fits ? 0 : greaterThan(0));
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  testWidgets(
+    'invitation email and PDF notes stay visible above the keyboard',
+    (tester) async {
+      tester.view.physicalSize = const Size(393, 852);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetViewInsets();
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            profileProvider.overrideWith(
+              (_) async => ProfileModel(
+                id: 'owner',
+                fullName: 'Мастер',
+                currency: 'RUB',
+                subscriptionPlan: SubscriptionPlan.team,
+                subscriptionRenewsAt: DateTime(2099),
+              ),
+            ),
+            estimatesProvider.overrideWith((_) async => <EstimateModel>[]),
+            teamWorkspaceProvider.overrideWith(
+              (_) async => const TeamWorkspaceModel(
+                id: 'team',
+                name: 'Бригада',
+                ownerUserId: 'owner',
+                role: 'owner',
+                maxMembers: 6,
+                seatsUsed: 1,
+                isActive: true,
+              ),
+            ),
+            teamMembersProvider.overrideWith((_) async => <TeamMemberModel>[]),
+            teamInvitesProvider.overrideWith((_) async => <TeamInviteModel>[]),
+            incomingTeamInvitesProvider.overrideWith(
+              (_) async => <IncomingTeamInviteModel>[],
+            ),
+          ],
+          child: MaterialApp(
+            theme: buildAppTheme(),
+            home: const SettingsScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Тариф и бригада'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Пригласить мастера'));
+      await tester.tap(find.text('Пригласить мастера'));
+      await tester.pumpAndSettle();
+      final email = find.widgetWithText(TextField, 'Email мастера');
+      await tester.tap(email);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 350);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomRight(email).dy, lessThanOrEqualTo(502));
+      await tester.enterText(email, 'master@example.com');
+      await tester.tap(find.byTooltip('Закрыть').last);
+      await tester.pumpAndSettle();
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Оформление PDF'));
+      await tester.pumpAndSettle();
+      final note = find.widgetWithText(TextField, 'Примечание в PDF');
+      await tester.ensureVisible(note);
+      await tester.tap(note);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 350);
+      await tester.pumpAndSettle();
+      expect(tester.getBottomRight(note).dy, lessThanOrEqualTo(502));
+      await tester.enterText(note, 'Смета действует 7 дней');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets('dismisses the tariff sheet by dragging its fixed header', (
     tester,

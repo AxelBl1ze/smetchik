@@ -7,6 +7,7 @@ import '../../core/app_theme.dart';
 import '../../data/models.dart';
 import '../../data/repository.dart';
 import '../../shared/ui.dart';
+import '../../shared/keyboard_form_sheet.dart';
 
 class SupportScreen extends ConsumerWidget {
   const SupportScreen({super.key});
@@ -451,93 +452,45 @@ class _NewTicketSheetState extends State<_NewTicketSheet> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: Material(
-        color: Colors.transparent,
-        child: SafeArea(
-          top: false,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-            decoration: const BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: AppColors.orangeLight,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.support_agent_rounded,
-                          color: AppColors.orangeDark,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Новое обращение',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Закрыть',
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _subject,
-                    textCapitalization: TextCapitalization.sentences,
-                    maxLength: 120,
-                    decoration: const InputDecoration(
-                      labelText: 'Тема',
-                      hintText: 'Например: не получается отправить смету',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _message,
-                    minLines: 3,
-                    maxLines: 6,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: const InputDecoration(
-                      labelText: 'Опишите вопрос',
-                      hintText: 'Что произошло и что вы ожидали увидеть?',
-                      alignLabelWithHint: true,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  FilledButton.icon(
-                    onPressed: _submit,
-                    icon: const Icon(Icons.send_outlined),
-                    label: const Text('Отправить в поддержку'),
-                  ),
-                ],
-              ),
-            ),
+  Widget build(BuildContext context) => KeyboardFormSheet(
+    header: const Text(
+      'Новое обращение',
+      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _subject,
+          textCapitalization: TextCapitalization.sentences,
+          maxLength: 120,
+          decoration: const InputDecoration(
+            labelText: 'Тема',
+            hintText: 'Например: не получается отправить смету',
           ),
         ),
-      ),
-    );
-  }
+        const SizedBox(height: 8),
+        TextField(
+          controller: _message,
+          minLines: 3,
+          maxLines: 6,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+            labelText: 'Опишите вопрос',
+            hintText: 'Что произошло и что вы ожидали увидеть?',
+            alignLabelWithHint: true,
+          ),
+        ),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send_outlined),
+          label: const Text('Отправить в поддержку'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _SupportHint extends StatelessWidget {

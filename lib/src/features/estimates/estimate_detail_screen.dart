@@ -17,6 +17,7 @@ import '../../data/pdf_service.dart';
 import '../../data/repository.dart';
 import '../../data/signing.dart';
 import '../../shared/ui.dart';
+import '../../shared/keyboard_form_sheet.dart';
 import '../../shared/upgrade_sheet.dart';
 
 class EstimateDetailScreen extends ConsumerStatefulWidget {
@@ -1390,170 +1391,113 @@ class _ClientSignatureVerificationSheetState
   Widget build(BuildContext context) {
     final busy = _sending || _verifying;
     final challenge = _challenge;
-    return SafeArea(
-      top: false,
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 540),
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.16),
-                  blurRadius: 28,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.orangeLight,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(
-                        Icons.verified_user_outlined,
-                        color: AppColors.orange,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Подтвердите клиента',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          Text(
-                            '${widget.clientName} · ${widget.clientPhone}',
-                            style: const TextStyle(
-                              color: AppColors.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Закрыть',
-                      onPressed: busy
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Text(
-                    challenge == null
-                        ? 'Отправим одноразовый код в Telegram на номер клиента. После проверки станет доступна подпись сметы.'
-                        : 'Код отправлен на ${challenge.maskedPhone}. Он действует 10 минут и будет использован только для этой сметы.',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    _error!,
-                    style: const TextStyle(
-                      color: AppColors.danger,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                if (challenge == null)
-                  FilledButton.icon(
-                    onPressed: busy ? null : _requestCode,
-                    icon: _sending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.telegram),
-                    label: const Text('Отправить код в Telegram'),
-                  )
-                else ...[
-                  TextField(
-                    controller: _code,
-                    autofocus: true,
-                    keyboardType: TextInputType.number,
-                    maxLength: 6,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w900,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'Код из Telegram',
-                      counterText: '',
-                      prefixIcon: Icon(Icons.password_outlined),
-                    ),
-                    autofillHints: const [AutofillHints.oneTimeCode],
-                    onChanged: (_) => setState(() => _error = null),
-                    onSubmitted: (_) => busy ? null : _verifyCode(),
-                  ),
-                  const SizedBox(height: 10),
-                  FilledButton.icon(
-                    onPressed: busy ? null : _verifyCode,
-                    icon: _verifying
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.check),
-                    label: const Text('Подтвердить код'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: busy ? null : _requestCode,
-                    child: const Text('Отправить новый код'),
-                  ),
-                ],
-              ],
+    return KeyboardFormSheet(
+      closeEnabled: !busy,
+      header: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Подтвердите клиента',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
+          Text(
+            '${widget.clientName} · ${widget.clientPhone}',
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
-        ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Text(
+              challenge == null
+                  ? 'Отправим одноразовый код в Telegram на номер клиента. После проверки станет доступна подпись сметы.'
+                  : 'Код отправлен на ${challenge.maskedPhone}. Он действует 10 минут и будет использован только для этой сметы.',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _error!,
+              style: const TextStyle(
+                color: AppColors.danger,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          if (challenge == null)
+            FilledButton.icon(
+              onPressed: busy ? null : _requestCode,
+              icon: _sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.telegram),
+              label: const Text('Отправить код в Telegram'),
+            )
+          else ...[
+            TextField(
+              controller: _code,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+              decoration: const InputDecoration(
+                labelText: 'Код из Telegram',
+                counterText: '',
+                prefixIcon: Icon(Icons.password_outlined),
+              ),
+              autofillHints: const [AutofillHints.oneTimeCode],
+              onChanged: (_) => setState(() => _error = null),
+              onSubmitted: (_) => busy ? null : _verifyCode(),
+            ),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: busy ? null : _verifyCode,
+              icon: _verifying
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check),
+              label: const Text('Подтвердить код'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: busy ? null : _requestCode,
+              child: const Text('Отправить новый код'),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -10,6 +10,7 @@ import '../core/app_config.dart';
 import '../core/app_theme.dart';
 import '../data/models.dart';
 import '../shared/keyboard_dismiss_on_tap.dart';
+import '../shared/focus_aware_scroll_view.dart';
 import '../shared/ui.dart';
 import 'admin_api.dart';
 import 'admin_download.dart';
@@ -145,7 +146,7 @@ class _AdminLoginState extends State<_AdminLogin> {
           const Positioned.fill(child: ColoredBox(color: AppColors.graphite)),
           Align(
             alignment: Alignment.center,
-            child: SingleChildScrollView(
+            child: FocusAwareScrollView(
               padding: const EdgeInsets.all(20),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 960),
@@ -4041,7 +4042,7 @@ class _AdminDialogFrame extends StatelessWidget {
           color: AppColors.card,
           borderRadius: BorderRadius.circular(24),
           clipBehavior: Clip.antiAlias,
-          child: SingleChildScrollView(
+          child: FocusAwareScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -4384,44 +4385,61 @@ class _EmptyPanel extends StatelessWidget {
 }
 
 Future<int?> _askDays(BuildContext context, {required String title}) async {
-  final controller = TextEditingController(text: '30');
   final value = await showDialog<int>(
     context: context,
-    builder: (context) => _AdminDialogFrame(
-      icon: Icons.workspace_premium_outlined,
-      title: title,
-      subtitle: 'Доступ включится сразу после подтверждения.',
-      footer: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Отмена'),
-            ),
+    builder: (_) => _GrantDaysDialog(title: title),
+  );
+  return value == null || value < 1 ? null : value;
+}
+
+class _GrantDaysDialog extends StatefulWidget {
+  const _GrantDaysDialog({required this.title});
+  final String title;
+
+  @override
+  State<_GrantDaysDialog> createState() => _GrantDaysDialogState();
+}
+
+class _GrantDaysDialogState extends State<_GrantDaysDialog> {
+  final controller = TextEditingController(text: '30');
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => _AdminDialogFrame(
+    icon: Icons.workspace_premium_outlined,
+    title: widget.title,
+    subtitle: 'Доступ включится сразу после подтверждения.',
+    footer: Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Отмена'),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.graphite,
-              ),
-              onPressed: () =>
-                  Navigator.of(context).pop(int.tryParse(controller.text)),
-              child: const Text('Выдать'),
-            ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.graphite),
+            onPressed: () =>
+                Navigator.of(context).pop(int.tryParse(controller.text)),
+            child: const Text('Выдать'),
           ),
-        ],
-      ),
-      child: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(labelText: 'Количество дней'),
-      ),
+        ),
+      ],
+    ),
+    child: TextField(
+      controller: controller,
+      autofocus: true,
+      keyboardType: TextInputType.number,
+      decoration: const InputDecoration(labelText: 'Количество дней'),
     ),
   );
-  controller.dispose();
-  return value == null || value < 1 ? null : value;
 }
 
 Map<String, dynamic> _record(Object? value) =>

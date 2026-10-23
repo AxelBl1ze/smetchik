@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../shared/keyboard_form_sheet.dart';
 
 class ProjectPayerField extends StatelessWidget {
   const ProjectPayerField({
@@ -71,79 +72,47 @@ class _PayerPickerState extends State<_PayerPicker> {
     final names = widget.names
         .where((name) => name.toLowerCase().contains(_query.toLowerCase()))
         .toList();
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: MediaQuery.sizeOf(context).height * .52,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Плательщики объекта',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: 'Закрыть',
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  maxLength: 120,
-                  decoration: const InputDecoration(
-                    hintText: 'Найти по имени',
-                    prefixIcon: Icon(Icons.search),
-                    counterText: '',
-                  ),
-                  onChanged: (value) => setState(() => _query = value.trim()),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: ListView(
-                    children: [
-                      for (final name in names)
-                        ListTile(
-                          leading: const Icon(
-                            Icons.person_outline,
-                            color: AppColors.orangeDark,
-                          ),
-                          title: Text(name),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.pop(context, name),
-                        ),
-                      if (_query.isNotEmpty &&
-                          !widget.names.any(
-                            (name) =>
-                                name.toLowerCase() == _query.toLowerCase(),
-                          ))
-                        ListTile(
-                          leading: const Icon(
-                            Icons.person_add_alt_outlined,
-                            color: AppColors.orangeDark,
-                          ),
-                          title: Text('Добавить «$_query»'),
-                          onTap: () => Navigator.pop(context, _query),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+    return KeyboardFormSheet(
+      header: const Text(
+        'Плательщики объекта',
+        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            maxLength: 120,
+            decoration: const InputDecoration(
+              hintText: 'Найти по имени',
+              prefixIcon: Icon(Icons.search),
+              counterText: '',
             ),
+            onChanged: (value) => setState(() => _query = value.trim()),
           ),
-        ),
+          const SizedBox(height: 8),
+          for (final name in names)
+            ListTile(
+              leading: const Icon(
+                Icons.person_outline,
+                color: AppColors.orangeDark,
+              ),
+              title: Text(name),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.pop(context, name),
+            ),
+          if (_query.isNotEmpty &&
+              !widget.names.any(
+                (name) => name.toLowerCase() == _query.toLowerCase(),
+              ))
+            ListTile(
+              leading: const Icon(
+                Icons.person_add_alt_outlined,
+                color: AppColors.orangeDark,
+              ),
+              title: Text('Добавить «$_query»'),
+              onTap: () => Navigator.pop(context, _query),
+            ),
+        ],
       ),
     );
   }
